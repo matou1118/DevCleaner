@@ -388,9 +388,13 @@ class MainWindow(QMainWindow):
         titles = QVBoxLayout()
         titles.setSpacing(2)
         titles.addWidget(_lbl("● DevCleaner", "title"))
-        titles.addWidget(_lbl(T("本地独立清理 · 所有条目移入 Windows 回收站，可恢复"), "subtitle"))
-        hl.addLayout(titles)
-        hl.addStretch(1)
+        # 副标题给伸缩因子：英文比中文长一截，不设的话会被右边的下拉框压掉
+        # 尾巴（中文下刚好不露，英文下就剩 "everything goes to the Recycl"）。
+        sub = _lbl(T("本地独立清理 · 所有条目移入 Windows 回收站，可恢复"), "subtitle")
+        sub.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        titles.addWidget(sub)
+        hl.addLayout(titles, 1)
+        hl.addStretch(0)
         self.cb_theme = QComboBox()
         for k in engine.THEME_ORDER:
             self.cb_theme.addItem(engine.THEMES[k]["n"], k)

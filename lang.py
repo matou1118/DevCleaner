@@ -107,7 +107,10 @@ _EN: Dict[str, str] = {
     "未分类": "Uncategorised",
     "空文件 / 空目录 / 断链": "Empty files / empty dirs / broken links",
     "全局 npm 垃圾": "Global npm junk",
+    "全局 npm 包": "Global npm packages",
     "Git 仓库": "Git repos",
+    "注册表": "Registry",
+    "可安全重置": "safe to reset",
 
     # ---- 全角标点 ----
     "，": ", ",

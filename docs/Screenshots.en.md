@@ -3,29 +3,28 @@
 The README carries one hero image; the rest live here. All captured from a real `v0.1.0` run
 (Windows 11, 24 volumes).
 
-> The UI text is hardcoded Chinese, so the images are in Chinese. See [usage.en.md](usage.en.md) for
-> the English guide.
+> The UI speaks both Chinese and English — pick one in the top-right corner. Both sets are below.
 
 ## Every category on one screen
 
 Everything is collapsed by default, so all 10 categories and their reclaimable sizes fit without
 scrolling.
 
-![Overview](01-overview.png)
+![Overview](01-overview.en.png)
 
 ## Expanded
 
-Click a header row or "全部展开". Four lines per item: name, path, the deciding signal, and why it's
+Click a header row or "Expand all". Four lines per item: name, path, the deciding signal, and why it's
 safe.
 
-![Expanded](02-expanded.png)
+![Expanded](02-expanded.en.png)
 
 ## The confirmation dialog
 
-Lists the first 40 items with name + size + full path, calls out every "needs confirmation" item,
+Lists the first 40 items with name + size + full path, calls out every "needs review" item,
 and — when registry items are included — prints the backup directory and the restore command.
 
-![Confirm](03-confirm.png)
+![Confirm](03-confirm.en.png)
 
 ## Registry
 

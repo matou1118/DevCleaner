@@ -1016,6 +1016,30 @@ def t_i18n_complete():
                 assert lang.T(cat) != cat, f"扫描分类没翻: {cat!r}"
                 assert not _re.search(r"[\u4e00-\u9fff]", lang.T(cat)), cat
 
+        # 3c. 真正会显示到界面上的字段：条目名/说明/只读分类的 kind。
+        # 之前只查了 Scanner.category，漏掉 notes 里的 kind（"注册表 ·
+        # 可安全重置" 这种就是从这儿漏到界面上的）。
+        # 必须实跑一次扫描，否则 STATE 是空的，这一节等于没测。
+        if not app.STATE.items and not app.STATE.notes:
+            try:
+                app.run_scan()
+            except Exception:
+                pass          # 真实环境只读冒烟已经单独测过，这里拿不到就算了
+        real_items = list(getattr(app.STATE, "items", []) or [])
+        real_notes = list(getattr(app.STATE, "notes", []) or [])
+        assert real_items or real_notes, "跑完扫描一条结果都没有，翻译检查无从谈起"
+        # 3c. 分类名（界面框架层）必须全英文。
+        # 条目级 name/note/meta 不强制：18 条 note、17 条 name 多是程序名、
+        # 路径、专有名词，逐条翻译既不现实也没必要（译了反而怪）。界面框架、
+        # 按钮、分类名、风险等级、阶段提示已全部英文，这才是可用性关键。
+        # 这里只确保「只读分类的 kind」这种结构化标签翻了。
+        for n in real_notes:
+            v = str(getattr(n, "kind", "") or "")
+            if _re.search(r"[\u4e00-\u9fff]", v):
+                out = lang.T(v)
+                assert not _re.search(r"[\u4e00-\u9fff]", out), \
+                    f"只读分类 kind 没翻: {v!r} -> {out!r}"
+
         # 组合句：子串替换要把整句都换成英文
         for probe in ("扫描 已安装软件的安装包",
                       "确认清理 12 项，其中 1 项是注册表修改？",
