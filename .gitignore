@@ -1,0 +1,30 @@
+# 打包产物
+build/
+dist/
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 开发残留（注意：不要忽略 .gitkeep，它是刻意留的）
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 本地私有副本（settings.yaml 本身要提交：它是开箱即用的默认配置。
+# 换机器时按需改里面的路径。）
+settings.local.yaml
+
+# 设计草稿 / 临时产物
+.superpowers/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

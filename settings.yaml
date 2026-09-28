@@ -1,0 +1,88 @@
+# DevCleaner 配置
+# 路径支持 %VAR%，/ 与 \ 都可以
+
+# ---------- 递归扫描根（只用于 .venv / Git仓库 / 构建产物 这类需要遍历的） ----------
+# 不要放 C:/ ，会慢到没法用
+scan_roots:
+  - "%USERPROFILE%"
+  - "D:/my tools"
+  - "D:/HuaweiMoveData/Users/Administrator/Documents"
+  - "D:/HuaweiMoveData/Users/Administrator/Desktop"
+
+# ---------- 安装包目录（留空 = 自动从 Windows 已知文件夹取 Downloads + Desktop） ----------
+installer_roots: []
+
+# ---------- 只取顶层遍历的目录（更新器残留扫描用） ----------
+folder_roots:
+  - "%LOCALAPPDATA%"
+  - "%APPDATA%"
+  - "C:/ProgramData"
+
+# ---------- 全局白名单：完全不进入结果 ----------
+exclude_dirs:
+  - "%USERPROFILE%/.ssh"
+  - "%USERPROFILE%/.gnupg"
+  - "%USERPROFILE%/AppData/Local/Programs"
+  - "C:/Windows"
+  - "C:/Program Files"
+  - "C:/Program Files (x86)"
+  - "D:/my tools/OpenHarmony"
+
+# ---------- 按目录名排除 ----------
+exclude_globs:
+  - "**/node_modules/**"
+  - "**/.git/**"
+  - "**/.venv/**"
+
+# ---------- 安装包判定 ----------
+# 小于这个体积的 exe/msi/zip 不作为候选
+min_installer_size_bytes: 8388608      # 8 MB
+# 距今少于这个天数的安装包不作为候选（刚下的可能还没装）
+min_installer_age_days: 14
+
+# ---------- 卸载注册表 DisplayName 匹配不到时的别名表 ----------
+# 产品名: [实际安装目录名 / 进程名]
+installed_aliases:
+  OfficeAce: ["OfficeClaw"]
+  Chrome: ["Google Chrome"]
+  Feishu: ["Lark", "Feishu", "LarkShell"]
+
+# ---------- AI Agent 配置（判断哪些插件缓存还在用） ----------
+agent_configs:
+  - path: "%USERPROFILE%/.config/opencode/opencode.jsonc"
+  - path: "%USERPROFILE%/.config/opencode/opencode.json"
+
+# opencode 自己的包缓存目录
+agent_cache_root: "%USERPROFILE%/.cache/opencode/packages"
+
+# 全局 npm 包（只读展示）
+global_npm_root: "%APPDATA%/npm/node_modules"
+
+# ---------- 自定义缓存目录（直接进结果，零代码） ----------
+custom_cache:
+  - name: "pip 下载缓存"
+    path: "%LOCALAPPDATA%/pip/Cache"
+    risk: safe
+    note: "pip 下载的 wheel 缓存，删了重新下载即可。"
+  - name: "HiBit 卸载报告"
+    path: "D:/my tools/HiBitUninstaller/HiBitUninstaller/Uninstaller/Reports"
+    risk: safe
+    note: "HiBit 的历史卸载日志，纯文本记录，无保留价值。"
+  - name: "Windows 缩略图缓存"
+    path: "%LOCALAPPDATA%/Microsoft/Windows/Explorer"
+    risk: safe
+    note: "资源管理器缩略图缓存，会自动重建。"
+  - name: "崩溃转储"
+    path: "%LOCALAPPDATA%/CrashDumps"
+    risk: safe
+    note: "程序崩溃转储文件。"
+  - name: "HiBit 注册表清理备份"
+    path: "D:/my tools/HiBitUninstaller/HiBitUninstaller/Registry Cleaner/Backup"
+    risk: caution
+    note: "注册表清理前的回滚快照。确认清理没问题后即可删。"
+
+# ---------- 扫描行为 ----------
+scan_options:
+  max_recursion_depth: 10
+  skip_dirs_with_access_error: true
+  min_size_bytes: 2097152            # 2 MB，低于此不显示

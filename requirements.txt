@@ -1,0 +1,9 @@
+# 运行时依赖（引擎只用到 psutil + PyYAML，其余全是标准库）
+psutil>=5.9
+PyYAML>=6.0
+
+# 界面
+PySide6-Essentials>=6.5
+
+# 打包（只有自己重新打包时才需要）
+pyinstaller>=6.0
