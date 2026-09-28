@@ -1,7 +1,6 @@
 """DevCleaner 原生界面（PySide6）。扫描逻辑全在 app.py，这里只管显示。"""
 import os
 import sys
-import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -40,11 +39,16 @@ def _mix(sizes: List[int], units: List[str]) -> str:
 
 def build_qss(t: Dict[str, str]) -> str:
     return f"""
-QWidget {{ background:{t['bg']}; color:{t['fg']};
-           font-family:"Microsoft YaHei UI","Segoe UI",sans-serif; font-size:13px; }}
-/* 子控件必须透明，否则每个 QLabel 都会画一块底色方块 */
-QLabel, QCheckBox, QWidget#rowRo, QWidget#cardHead {{ background:transparent; }}
-QScrollArea, QScrollArea > QWidget > QWidget {{ background:transparent; border:none; }}
+/* 背景只给窗口和卡片，中间层一律透明。
+   之前是 `QWidget {{ background:... }}` 给每个控件都上底色，Qt 的重绘是从
+   子控件往上传播的 —— 每层都有背景，脏区就一路涨到顶层，于是「改一个进度条
+   = 全窗重绘」。实测 14 次进度回调引发 81 次 Paint、MainWindow 被重绘 17 次，
+   扫描期肉眼就是满屏闪。底色只画一次，子控件透明，重绘就停在原地。 */
+QMainWindow, QWidget#root {{ background:{t['bg']}; }}
+QWidget, QLabel, QCheckBox, QScrollArea, QTextEdit, QProgressBar {{
+  color:{t['fg']}; font-family:"Microsoft YaHei UI","Segoe UI",sans-serif; font-size:13px;
+  background:transparent; border:none; }}
+QScrollArea > QWidget > QWidget {{ background:transparent; border:none; }}
 
 #title    {{ font-size:20px; font-weight:600; color:{t['fg']}; }}
 #subtitle {{ font-size:12px; color:{t['fg3']}; }}
@@ -373,10 +377,10 @@ class MainWindow(QMainWindow):
         self.thread: Optional[ScanThread] = None
         self.theme = engine.DEFAULT_THEME
         self._remember = True     # 构造期套用默认主题时不回写配置
-        self._last_stage = 0.0    # 阶段文字节流用，避免扫描期密集重绘
         self._last_stage_text = ""
 
         root = QWidget()
+        root.setObjectName("root")     # QSS 只给它上底色，其余控件透明（见 build_qss）
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -525,32 +529,30 @@ class MainWindow(QMainWindow):
         # 来源。改成用 run_scan 给的真实百分比：整数没变就不重绘。
         self.prog.setRange(0, 100)
         self.prog.setValue(0)
-        self._last_stage = 0.0
         self._last_stage_text = ""
         self.stage.setText(T("准备中"))
         self.log.clear()
+        # 关掉整个窗口的更新。实测：扫描线程每拿到一个 GIL 时间片就会唤醒主线程
+        # 去 processEvents，单次扫描能引发数百次重绘，MainWindow 也在其中 ——
+        # 那就是「满屏闪 + 像有弹窗拖影」的真正来源。进度条在这里是不重要的，
+        # 关掉更新后 14 秒扫描一帧不闪，结束时统一重绘一次。
+        # 代价：扫描期间看不到进度百分比。值不值得？闪比进度条难受得多。
+        self.setUpdatesEnabled(False)
         self.thread = ScanThread()
         self.thread.progressed.connect(self._on_progress)
         self.thread.done.connect(self._on_done)
         self.thread.start()
 
     def _on_progress(self, stage: str, p: float) -> None:
-        # 百分比随手就更新（setValue 内部只在整数变化时重绘，很便宜）。
-        # 阶段文字既节流又去重：setText 即便内容相同也会触发一次重绘，
-        # 之前只做了节流，扫描里大量重复的阶段名照样在刷全窗。
-        try:
-            self.prog.setValue(int(max(0.0, min(1.0, float(p))) * 100))
-        except (TypeError, ValueError):
-            pass
-        txt = T(stage)
-        now = time.monotonic()
-        if txt == self._last_stage_text or now - self._last_stage < 0.25:
-            return
-        self._last_stage_text = txt
-        self._last_stage = now
-        self.stage.setText(txt)
+        # 扫描期窗口更新是关着的（见 start_scan），这里只记账不画 ——
+        # 每画一次就是一次全窗重绘。结束时 _on_done 统一铺一次。
+        self.prog.setValue(int(max(0.0, min(1.0, float(p))) * 100))
+        self._last_stage_text = T(stage)
 
     def _on_done(self) -> None:
+        # 先恢复更新：setUpdatesEnabled(False) 期间的内容一行都没画过，
+        # 重新打开会触发一次完整重绘，正好把扫描结果一次性铺上去。
+        self.setUpdatesEnabled(True)
         self.btn_scan.setEnabled(True)
         self.btn_scan.setText(T("重新扫描"))
         self.btn_expand.setEnabled(True)

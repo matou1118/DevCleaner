@@ -1174,50 +1174,59 @@ def t_web_site():
 
 
 def t_no_marquee_ghosting():
-    """扫描期不能有走马灯进度条，也不能重复 setText 同一句阶段文字。
+    """扫描期不得重绘 —— 满屏闪和「像有弹窗拖影」的根因。
 
-    这窗口的样式表让 160+ 个子控件互相牵连，任意一次重绘都是全窗重绘。
-    走马灯（setRange(0,0)）自己就连续重绘，等于 30 次/秒全窗刷新 —— 表现就是
-    扫描到 90% 时满屏闪、像有弹窗拖影。setText 即便内容相同也会触发重绘，
-    所以光节流不够，还得去重。
+    之前以为是走马灯进度条在刷，掐掉回调后仍有数百次重绘：扫描线程每拿到
+    一个 GIL 时间片就会唤醒主线程去 processEvents，单次扫描 MainWindow 自己
+    就被重绘十几次，而任意一次重绘都是全窗（160+ 个带样式的子控件）。
+    进度条不是元凶，扫描期间的整窗重绘才是。所以扫描期直接关掉窗口更新，
+    结束时统一铺一次。
     """
     import gui
+    from PySide6.QtCore import QEvent, QObject
     from PySide6.QtWidgets import QApplication
     import time
+
+    class Counter(QObject):
+        def __init__(self):
+            super().__init__()
+            self.n = 0
+            self.by_type = {}
+
+        def eventFilter(self, obj, ev):
+            if ev.type() == QEvent.Type.Paint:
+                self.n += 1
+                name = type(obj).__name__
+                self.by_type[name] = self.by_type.get(name, 0) + 1
+            return False
+
     qa = QApplication.instance() or QApplication([])
     w = gui.MainWindow()
     w.show()
+    w._remember = False
+    w.apply_theme(w.cb_theme.currentIndex())
+    QApplication.processEvents()
 
+    pc = Counter()
+    qa.installEventFilter(pc)
+    pc.n = 0
     w.start_scan()
-    # 进度条必须是确定值范围，不能是走马灯
-    assert w.prog.maximum() == 100, \
-        f"扫描期进度条 maximum={w.prog.maximum()}，0 就是走马灯，会全屏闪"
-    assert w.prog.minimum() == 0
+    # 扫描期窗口更新关着，setValue 也不该引起重绘
+    assert w.updatesEnabled() is False, "扫描期必须关掉窗口更新，否则满屏闪"
+    while w.thread and w.thread.isRunning():
+        QApplication.processEvents()
+        time.sleep(0.005)
+    QApplication.processEvents()
+    assert w.updatesEnabled() is True, "扫描结束必须恢复更新，否则结果是空窗"
 
-    # 连续喂同一个阶段名，文字标签不该被反复重设
-    label = w.stage
-    calls = {"n": 0}
-    orig = label.setText
-
-    def counting(v):
-        calls["n"] += 1
-        return orig(v)
-
-    label.setText = counting
-    w._last_stage_text = "SENTINEL"
-    w._last_stage = time.monotonic()
-    for _ in range(50):
-        w._on_progress("SENTINEL", 0.5)
-    label.setText = orig
-    assert calls["n"] == 0, f"同一句阶段文字被 setText 了 {calls['n']} 次，每次都是全窗重绘"
-
-    # 换新文字时仍要能更新
-    w._last_stage = 0.0
-    w._on_progress("别的阶段", 0.9)
-    assert label.text() == "别的阶段", label.text()
-
-    w.thread and w.thread.wait(300000)
+    # 真正的验收标准不是"设了个标志"，而是重绘次数真的降下来了。
+    # MainWindow 每次重绘都是一次全窗重绘 —— 超过 3 次就还会闪。
+    main_paints = pc.by_type.get("MainWindow", 0)
     w.close()
+    assert main_paints <= 3, \
+        f"扫描期 MainWindow 被重绘 {main_paints} 次（每次=全窗），闪没解决"
+    assert pc.n <= 40, f"扫描期总重绘 {pc.n} 次，超过阈值 40"
+    return pc.n
 
 
 # ---------------- 双语文档 ----------------
