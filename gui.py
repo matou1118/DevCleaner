@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
                                QVBoxLayout, QWidget, QProgressBar)
 
 import app as engine
+import lang
+from lang import T, set_lang
 
 # 勾选态底色，由 apply_theme 按当前主题算出（模块级，ItemRow 构造时用默认值）
 SEL_TINT = "rgba(91,140,255,26)"
@@ -21,7 +23,7 @@ SEL_TINT = "rgba(91,140,255,26)"
 def fmt(it) -> str:
     """按条目单位显示：注册表/空文件这类是「条目数」，不是字节"""
     if getattr(it, "unit", "bytes") == "count":
-        return f"{it.size} 项"
+        return f"{it.size} {T('项')}"
     return engine.human(it.size)
 
 
@@ -32,7 +34,7 @@ def _mix(sizes: List[int], units: List[str]) -> str:
     if b:
         parts.append(engine.human(b))
     if c:
-        parts.append(f"{c} 项")
+        parts.append(f"{c} {T('项')}")
     return " + ".join(parts) or "0 B"
 
 
@@ -128,11 +130,11 @@ def _human_path(it) -> str:
     if p.startswith("REG:"):
         op, _, arg = p[4:].partition(":")
         if op == "mru":
-            return r"HKCU 下 10 个「资源管理器使用记录」键"
+            return T(r"HKCU 下 10 个「资源管理器使用记录」键")
         return arg or p
     if p.startswith("BULK:"):
         n = len(engine.expand_bulk(p))
-        return f"扫描根目录下匹配的 {n} 个空文件 / 空目录 / 断链（逐条删除）"
+        return T(f"扫描根目录下匹配的 {n} 个空文件 / 空目录 / 断链（逐条删除）")
     return p
 
 
@@ -207,7 +209,7 @@ class ItemRow(QFrame):
         r.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         r.addWidget(_lbl(fmt(it), "itemSize"))
         risk = getattr(it, "risk", "note")
-        txt = {"safe": "安全", "caution": "需确认"}.get(risk, "只读")
+        txt = T({"safe": "安全", "caution": "需确认"}.get(risk, "只读"))
         obj = {"safe": "badgeSafe", "caution": "badgeCaution"}.get(risk, "badgeNote")
         r.addWidget(_lbl(txt, obj))
         h.addWidget(right, 0)
@@ -258,7 +260,7 @@ class CategoryCard(QFrame):
         units = [getattr(i, "unit", "bytes") for i in items]
         if selectable:
             sub = sum(1 for i in items if i.risk == "safe")
-            hh.addWidget(_lbl(f"{n} 项 · 安全 {sub}", "catCount"))
+            hh.addWidget(_lbl(T(f"{n} 项 · 安全 {sub}"), "catCount"))
         hh.addStretch(1)
         if hint:
             hh.addWidget(_lbl(hint, "catHint"))
@@ -286,16 +288,16 @@ class CategoryCard(QFrame):
             fb = QHBoxLayout(bar)
             fb.setContentsMargins(14, 7, 14, 7)
             fb.setSpacing(8)
-            b_all = QPushButton("全选本组")
+            b_all = QPushButton(T("全选本组"))
             b_all.setObjectName("small")
-            b_none = QPushButton("清空本组")
+            b_none = QPushButton(T("清选本组"))
             b_none.setObjectName("small")
             b_all.clicked.connect(lambda: self._bulk(True))
             b_none.clicked.connect(lambda: self._bulk(False))
             fb.addWidget(b_all)
             fb.addWidget(b_none)
             fb.addStretch(1)
-            fb.addWidget(_lbl(f"共 {_mix([i.size for i in items], units)}", "catHint"))
+            fb.addWidget(_lbl(T(f"共 {_mix([i.size for i in items], units)}"), "catHint"))
             v.addWidget(bar)
             self.footbar = bar
         else:
@@ -361,7 +363,7 @@ class ScanThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(f"{engine.APP_NAME} {engine.__version__} · 本地清理")
+        self.setWindowTitle(f"{engine.APP_NAME} {engine.__version__} · {T('本地清理')}")
         self.resize(1180, 900)
         self.setMinimumSize(880, 620)
         self.pick: set = set()
@@ -386,22 +388,32 @@ class MainWindow(QMainWindow):
         titles = QVBoxLayout()
         titles.setSpacing(2)
         titles.addWidget(_lbl("● DevCleaner", "title"))
-        titles.addWidget(_lbl("本地独立清理 · 所有条目移入 Windows 回收站，可恢复", "subtitle"))
+        titles.addWidget(_lbl(T("本地独立清理 · 所有条目移入 Windows 回收站，可恢复"), "subtitle"))
         hl.addLayout(titles)
         hl.addStretch(1)
         self.cb_theme = QComboBox()
         for k in engine.THEME_ORDER:
             self.cb_theme.addItem(engine.THEMES[k]["n"], k)
-        self.cb_theme.setToolTip("配色主题")
+        self.cb_theme.setToolTip(T("配色主题"))
         default = engine.DEFAULT_THEME
         if default in engine.THEME_ORDER:
             self.cb_theme.setCurrentIndex(engine.THEME_ORDER.index(default))
         self.cb_theme.currentIndexChanged.connect(self.apply_theme)
-        hl.addWidget(_lbl("主题", "themeLbl"))
+        hl.addWidget(_lbl(T("主题"), "themeLbl"))
         hl.addWidget(self.cb_theme)
-        self.t_safe = self._tile(hl, "安全可清", "—", "statOk")
-        self.t_caut = self._tile(hl, "需确认", "—", "statWarn")
-        self.t_tot = self._tile(hl, "合计", "—", "statV")
+
+        # ---- 语言 ----
+        self.cb_lang = QComboBox()
+        self.cb_lang.addItem("中文", "zh")
+        self.cb_lang.addItem("English", "en")
+        self.cb_lang.setCurrentIndex(0 if lang.LANG == "zh" else 1)
+        self.cb_lang.setToolTip(T("语言"))
+        self.cb_lang.currentIndexChanged.connect(self._switch_lang)
+        hl.addWidget(_lbl(T("语言"), "themeLbl"))
+        hl.addWidget(self.cb_lang)
+        self.t_safe = self._tile(hl, T("安全可清"), "—", "statOk")
+        self.t_caut = self._tile(hl, T("需确认"), "—", "statWarn")
+        self.t_tot = self._tile(hl, T("合计"), "—", "statV")
         outer.addWidget(head)
 
         # ---- 工具条 ----
@@ -409,11 +421,11 @@ class MainWindow(QMainWindow):
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(22, 0, 22, 12)
         bl.setSpacing(11)
-        self.btn_scan = QPushButton("开始扫描")
+        self.btn_scan = QPushButton(T("开始扫描"))
         self.btn_scan.setObjectName("primary")
         self.btn_scan.clicked.connect(self.start_scan)
         bl.addWidget(self.btn_scan)
-        self.btn_expand = QPushButton("全部展开")
+        self.btn_expand = QPushButton(T("全部展开"))
         self.btn_expand.clicked.connect(
             lambda: self._set_all_expanded(not self.cards[0].expanded()
                                            if self.cards else False))
@@ -422,7 +434,7 @@ class MainWindow(QMainWindow):
         self.prog.setTextVisible(False)
         self.prog.setRange(0, 100)
         bl.addWidget(self.prog, 1)
-        self.stage = _lbl("待命", "stage")
+        self.stage = _lbl(T("待命"), "stage")
         self.stage.setMinimumWidth(190)
         bl.addWidget(self.stage)
         outer.addWidget(bar)
@@ -439,7 +451,7 @@ class MainWindow(QMainWindow):
         self.list_layout.addStretch(1)
         self.scroll.setWidget(self.holder)
         outer.addWidget(self.scroll, 1)
-        self.placeholder = _lbl("点击「开始扫描」查找可清理项", "catCount")
+        self.placeholder = _lbl(T("点击「开始扫描」查找可清理项"), "catCount")
         self.placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.list_layout.insertWidget(0, self.placeholder)
 
@@ -456,23 +468,23 @@ class MainWindow(QMainWindow):
         fl = QHBoxLayout(foot)
         fl.setContentsMargins(22, 10, 22, 10)
         fl.setSpacing(10)
-        self.foot = _lbl("已选 0 项 · 0 B", "footText")
+        self.foot = _lbl(T("已选 0 项 · 0 B"), "footText")
         fl.addWidget(self.foot)
         self.ver = _lbl(f"v{engine.__version__}", "catHint")
         self.ver.setToolTip("DevCleaner · MIT License")
         fl.addWidget(self.ver)
         fl.addStretch(1)
-        b_all = QPushButton("全选安全项")
+        b_all = QPushButton(T("全选安全项"))
         b_all.clicked.connect(lambda: self.bulk(True))
-        b_none = QPushButton("清空选择")
+        b_none = QPushButton(T("清空选择"))
         b_none.clicked.connect(lambda: self.bulk(False))
-        self.btn_clean = QPushButton("移入回收站")
+        self.btn_clean = QPushButton(T("移入回收站"))
         self.btn_clean.setObjectName("primary")
         self.btn_clean.setEnabled(False)
         self.btn_clean.clicked.connect(self.do_clean)
         for b in (b_all, b_none, self.btn_clean):
             fl.addWidget(b)
-        self.btn_log = QPushButton("日志")
+        self.btn_log = QPushButton(T("日志"))
         self.btn_log.setObjectName("small")
         self.btn_log.clicked.connect(lambda: self.log.setVisible(not self.log.isVisible()))
         fl.addWidget(self.btn_log)
@@ -497,10 +509,10 @@ class MainWindow(QMainWindow):
             return
         self.pick.clear()
         self._clear_cards()
-        self.placeholder.setText("正在扫描…")
+        self.placeholder.setText(T("正在扫描…"))
         self.placeholder.show()            # 扫描中必须可见
         self.btn_scan.setEnabled(False)
-        self.btn_scan.setText("扫描中…")
+        self.btn_scan.setText(T("扫描中…"))
         self.btn_expand.setEnabled(False)
         # 扫描期改成不确定进度条（走马灯），并节流阶段文字。
         # 原因：扫描线程全程做 os.scandir/stat，信号一密集就会让主线程反复
@@ -508,7 +520,7 @@ class MainWindow(QMainWindow):
         # 表现出来就是「全屏闪动」。走马灯 + 250ms 节流把重绘压到最低。
         self.prog.setRange(0, 0)
         self._last_stage = 0.0
-        self.stage.setText("准备中")
+        self.stage.setText(T("准备中"))
         self.log.clear()
         self.thread = ScanThread()
         self.thread.progressed.connect(self._on_progress)
@@ -520,19 +532,19 @@ class MainWindow(QMainWindow):
         if now - self._last_stage < 0.25:
             return
         self._last_stage = now
-        self.stage.setText(stage)
+        self.stage.setText(T(stage))
 
     def _on_done(self) -> None:
         self.btn_scan.setEnabled(True)
-        self.btn_scan.setText("重新扫描")
+        self.btn_scan.setText(T("重新扫描"))
         self.btn_expand.setEnabled(True)
-        self.stage.setText(f"完成 · {engine.STATE.finished_at}")
+        self.stage.setText(T(f"完成 · {engine.STATE.finished_at}"))
         self.prog.setRange(0, 100)
         self.prog.setValue(100)
         self.log.setPlainText("\n".join(engine.STATE.log))
         if any(l.startswith(("[失败", "[异常")) for l in engine.STATE.log):
             self.log.show()          # 出错了才主动亮出来
-            self.btn_log.setText("隐藏日志")
+            self.btn_log.setText(T("隐藏日志"))
         self._render()
         self.bulk(True, only_safe=True)
         self.recalc()
@@ -555,7 +567,7 @@ class MainWindow(QMainWindow):
             groups.setdefault(it.category, []).append(it)
         for cat, rows in groups.items():
             rows.sort(key=lambda x: -x.size)
-            c = CategoryCard(cat, rows[0].icon or "●", rows, "可回收",
+            c = CategoryCard(T(cat), rows[0].icon or "●", rows, T("可回收"),
                              True, self._on_toggle)
             self.list_layout.insertWidget(self.list_layout.count() - 1, c)
             self.cards.append(c)
@@ -564,7 +576,7 @@ class MainWindow(QMainWindow):
             kinds.setdefault(n.kind or "其他", []).append(n)
         for kind, rows in kinds.items():
             rows.sort(key=lambda x: -x.size)
-            c = CategoryCard(f"{kind}（只读）", "\U0001f512", rows, "不提供删除",
+            c = CategoryCard(T(f"{kind}（只读）"), "\U0001f512", rows, T("不提供删除"),
                              False, self._on_toggle)
             self.list_layout.insertWidget(self.list_layout.count() - 1, c)
             self.notes_cards.append(c)
@@ -577,7 +589,7 @@ class MainWindow(QMainWindow):
                                             if i.unit != "count")))
         n_extra = sum(1 for i in engine.STATE.items if i.unit == "count")
         if n_extra:
-            self.stage.setText(f"完成 · {engine.STATE.finished_at} · 另有 {n_extra} 项按条目计")
+            self.stage.setText(T(f"完成 · {engine.STATE.finished_at} · 另有 {n_extra} 项按条目计"))
 
     # ---------------- 选择 ----------------
     def _on_toggle(self, path: Optional[str], on: bool) -> None:
@@ -611,15 +623,33 @@ class MainWindow(QMainWindow):
 
     def recalc(self) -> None:
         sel = [i for i in engine.STATE.items if i.path in self.pick]
-        self.foot.setText(
+        self.foot.setText(T(
             f"已选 {len(sel)} 项 · "
-            + _mix([i.size for i in sel], [getattr(i, "unit", "bytes") for i in sel]))
+            + _mix([i.size for i in sel], [getattr(i, "unit", "bytes") for i in sel])))
         self.btn_clean.setEnabled(bool(sel))
 
     def _set_all_expanded(self, on: bool) -> None:
         for c in self.cards + self.notes_cards:
             c.set_expanded(on)
-        self.btn_expand.setText("全部折叠" if on else "全部展开")
+        self.btn_expand.setText(T("全部折叠") if on else T("全部展开"))
+
+    # ---------------- 语言 ----------------
+    def _switch_lang(self, idx: int) -> None:
+        """切语言要重建窗口：文案散在各处 setText 里，没有统一的重绘入口。
+        扫描线程在跑时不重建（STATE 会被正在跑的线程改），下次启动生效。"""
+        code = self.cb_lang.itemData(idx)
+        if code == lang.LANG:
+            return
+        set_lang(code)
+        engine.set_config_value("lang", f'"{code}"')
+        if self.thread and self.thread.isRunning():
+            return
+        self.close()
+        w = MainWindow()
+        if engine.STATE.items or engine.STATE.notes:
+            w._render()
+        w.show()
+        self._next = w       # 不给引用会被 GC 掉，窗口一闪就没
 
     # ---------------- 主题 ----------------
     def apply_theme(self, idx: int) -> None:
@@ -658,27 +688,26 @@ class MainWindow(QMainWindow):
         if len(sel) > 40:
             lines += f"\n… 另有 {len(sel) - 40} 项"
         msg = QMessageBox(self)
-        msg.setWindowTitle("确认清理")
+        msg.setWindowTitle(T("确认清理"))
         msg.setIcon(QMessageBox.Icon.Warning)
-        msg.setWindowTitle("确认清理")
         if regs:
-            msg.setText(f"确认清理 {len(sel)} 项，其中 {len(regs)} 项是注册表修改？")
-            msg.setInformativeText(
+            msg.setText(T(f"确认清理 {len(sel)} 项，其中 {len(regs)} 项是注册表修改？"))
+            msg.setInformativeText(T(
                 f"文件类会移入回收站（可还原）。\n"
                 f"注册表类会先备份 .reg 到\n{engine.backup_root()}\n"
-                f"再删除，导出失败则不会删除。还原方式：对备份目录里的 .reg 执行 reg import。\n\n"
+                f"再删除，导出失败则不会删除。还原方式：对备份目录里的 .reg 执行 reg import。\n\n")
                 + lines)
         else:
-            extra = "其中包含批量删除，请注意条目数。" if any(
+            extra = T("其中包含批量删除，请注意条目数。") if any(
                 i.path.startswith("BULK:") for i in sel) else ""
-            msg.setText(f"确认清理 {len(sel)} 个条目，"
-                        f"合计 {_mix([i.size for i in sel], [getattr(i, 'unit', 'bytes') for i in sel])}？{extra}")
-            msg.setInformativeText("将移入 Windows 回收站，可在「回收站」中还原。\n\n" + lines)
+            msg.setText(T(f"确认清理 {len(sel)} 个条目，"
+                        f"合计 {_mix([i.size for i in sel], [getattr(i, 'unit', 'bytes') for i in sel])}？{extra}"))
+            msg.setInformativeText(T("将移入 Windows 回收站，可在「回收站」中还原。\n\n") + lines)
         if risky:
             msg.setStandardButtons(QMessageBox.StandardButton.Cancel
                                    | QMessageBox.StandardButton.Ok)
-            msg.setText(msg.text() +
-                        f"\n\n⚠ 其中 {len(risky)} 项标记为「需确认」：\n"
+            msg.setText(T(msg.text() +
+                        f"\n\n⚠ 其中 {len(risky)} 项标记为「需确认」：\n")
                         + "\n".join("· " + i.name for i in risky[:8])
                         + ("\n… 另有 " + str(len(risky) - 8) + " 项" if len(risky) > 8 else ""))
             ok = msg.exec()
@@ -728,7 +757,7 @@ class MainWindow(QMainWindow):
             report.append("\n文件已进入回收站，清空回收站后才会真正释放空间。")
         if fail:
             report.append(f"\n未处理 {len(fail)} 项：\n· " + "\n· ".join(fail[:15]))
-        QMessageBox.information(self, "清理结果", "\n".join(report))
+        QMessageBox.information(self, T("清理结果"), "\n".join(report))
         self.bulk(False)
         self._render()
         self.recalc()
@@ -755,6 +784,7 @@ def main() -> int:
              "  DevCleaner.exe --version  打印版本\n"
              "配置见 exe 同目录的 settings.yaml")
         return 0
+    set_lang(str(engine.CFG.get("lang") or "zh"))
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
     qa = QApplication(sys.argv)
     qa.setApplicationName(engine.APP_NAME)

@@ -6,6 +6,10 @@
 # Theme. Written automatically when you switch in the UI; this is the fallback.
 theme: "Tokyo Night"
 
+# ---------- 界面语言：zh / en（界面右上角切换，会自动写入） ----------
+# UI language: zh / en. Written automatically when you switch in the UI.
+lang: "zh"
+
 # ---------- 需要递归遍历的根（.venv / Git 仓库 / 构建产物 / 空文件） ----------
 # 递归加盘符会明显变慢：空文件扫描必须全量遍历。
 # Roots that need recursive walking. Adding drives slows things down noticeably — the

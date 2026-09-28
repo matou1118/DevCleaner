@@ -976,6 +976,65 @@ def t_dist_bundle_sane():
         assert key in data, f"dist 缺 {key}"
 
 
+def t_i18n_complete():
+    """界面文案英译不能有漏网的词。
+
+    三道闸：
+    1. 表里每条译文都得真的变了（不能映射回自己）
+    2. 译文里不能混进中文（半吊子翻译比不翻译更糟）
+    3. gui.py 里每个 T("中文") 都得有对应条目；app.py 里每个扫描分类也得有
+    """
+    import lang
+    import gui
+    import re as _re
+
+    lang.set_lang("en")
+    try:
+        # 1 + 2
+        # 全角标点本来就该翻成空串（引号），或短到非空即算翻过
+        for k, v in lang._EN.items():
+            if not _re.search(r"[\u4e00-\u9fff]", k):
+                continue          # 纯标点条目不参与「有内容」的检查
+            assert v.strip(), f"译文为空: {k!r}"
+            assert lang.T(k) != k, f"这条没翻: {k!r}"
+            assert not _re.search(r"[\u4e00-\u9fff]", v), \
+                f"译文里还有中文: {k!r} -> {v!r}"
+
+        # 3a. gui.py 里所有 T("...") 字面量
+        src = (Path(__file__).parent / "gui.py").read_text(encoding="utf-8")
+        used = set(_re.findall(r'T\((?:f?)([rf]?)"([^"]*)"', src))
+        for _q, lit in used:
+            if not _re.search(r"[\u4e00-\u9fff]", lit):
+                continue
+            # 组合句由子串拼，只要求它含的每个已知词组都翻了
+            missing = [g for g in lang._EN if g in lit and lang.T(g) == g]
+            assert not missing, f"gui.py 这句有词没翻: {lit!r} 缺 {missing}"
+        # 3b. app.py 的每个扫描分类都要能翻
+        for sc in app.SCANNERS:
+            cat = sc.category
+            if _re.search(r"[\u4e00-\u9fff]", cat):
+                assert lang.T(cat) != cat, f"扫描分类没翻: {cat!r}"
+                assert not _re.search(r"[\u4e00-\u9fff]", lang.T(cat)), cat
+
+        # 组合句：子串替换要把整句都换成英文
+        for probe in ("扫描 已安装软件的安装包",
+                      "确认清理 12 项，其中 1 项是注册表修改？",
+                      "已选 8 项 · 1.2 GB",
+                      "完成 · 19:42:10 · 另有 4369 项按条目计"):
+            out = lang.T(probe)
+            assert not _re.search(r"[\u4e00-\u9fff]", out), \
+                f"组合句没翻干净: {probe!r} -> {out!r}"
+            # 标点译文自带空格，叠上原文空格会出现 "12  items" 这种双空格
+            assert not _re.search(r"[ \t]{2,}", out), \
+                f"译文里有双空格: {out!r}"
+    finally:
+        lang.set_lang("zh")
+
+    # 中文模式必须是恒等函数
+    assert lang.T("移入回收站") == "移入回收站"
+    assert lang.set_lang("xx") is None and lang.LANG == "zh"
+
+
 # ---------------- 双语文档 ----------------
 def t_docs_bilingual():
     """面向人的文档必须有英文版。
@@ -1141,6 +1200,7 @@ if __name__ == "__main__":
         check("CI/Issue 模板 YAML 合法", t_ci_yaml_valid)
         check("CLI 版本信息可获取", t_cli_version_reachable)
         check("dist 打包产物完整", t_dist_bundle_sane)
+        check("界面文案英译无遗漏", t_i18n_complete)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
