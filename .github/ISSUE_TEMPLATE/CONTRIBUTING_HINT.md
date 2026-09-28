@@ -1,5 +1,7 @@
 # 给本项目提 Issue 之前
 
+> English version: [CONTRIBUTING_HINT.en.md](CONTRIBUTING_HINT.en.md)
+
 先花两分钟看一眼下面这份清单，能省掉一轮来回。
 
 ## 1. 报 bug

@@ -1,24 +1,36 @@
-# DevCleaner 配置
+# DevCleaner 配置 / Configuration
 # 路径支持 %VAR%，/ 与 \ 都可以
+# Paths accept %VAR%; both / and \ work
 
-# ---------- 递归扫描根（只用于 .venv / Git仓库 / 构建产物 这类需要遍历的） ----------
-# 不要放 C:/ ，会慢到没法用
+# ---------- 主题（界面右上角切换时会自动写入，这里是默认值） ----------
+# Theme. Written automatically when you switch in the UI; this is the fallback.
+theme: "Tokyo Night"
+
+# ---------- 需要递归遍历的根（.venv / Git 仓库 / 构建产物 / 空文件） ----------
+# 递归加盘符会明显变慢：空文件扫描必须全量遍历。
+# Roots that need recursive walking. Adding drives slows things down noticeably — the
+# empty-file scan has to walk everything.
 scan_roots:
   - "%USERPROFILE%"
-  - "D:/my tools"
-  - "D:/HuaweiMoveData/Users/Administrator/Documents"
-  - "D:/HuaweiMoveData/Users/Administrator/Desktop"
 
-# ---------- 安装包目录（留空 = 自动从 Windows 已知文件夹取 Downloads + Desktop） ----------
+# ---------- 安装包目录 ----------
+# 留空 = 自动从 Windows 已知文件夹取 Downloads + Desktop（能正确解析重定向）
+# Installer directories. Empty = auto-detect Downloads + Desktop via the Windows
+# known-folders API, which resolves redirection correctly.
 installer_roots: []
 
-# ---------- 只取顶层遍历的目录（更新器残留扫描用） ----------
+# ---------- 只取顶层遍历的目录（更新器残留扫描用）----------
+# Directories walked top-level only (used by the updater-leftover scanner)
 folder_roots:
   - "%LOCALAPPDATA%"
   - "%APPDATA%"
   - "C:/ProgramData"
 
-# ---------- 全局白名单：完全不进入结果 ----------
+# ---------- 全局白名单：完全不进结果，连统计都不做 ----------
+# Allow-list. A hit is skipped entirely, not even counted.
+# 系统目录默认已排除；不建议把别的开发目录也排除，会让结果失真。
+# System directories are excluded by default. Don't exclude other dev directories —
+# that would skew the results.
 exclude_dirs:
   - "%USERPROFILE%/.ssh"
   - "%USERPROFILE%/.gnupg"
@@ -28,63 +40,90 @@ exclude_dirs:
   - "C:/Program Files (x86)"
   - "D:/my tools/OpenHarmony"
 
-# ---------- 按目录名排除 ----------
+# ---------- 按目录名排除（通配）----------
+# Exclude by directory-name glob
 exclude_globs:
   - "**/node_modules/**"
   - "**/.git/**"
   - "**/.venv/**"
 
 # ---------- 安装包判定 ----------
-# 小于这个体积的 exe/msi/zip 不作为候选
-min_installer_size_bytes: 8388608      # 8 MB
-# 距今少于这个天数的安装包不作为候选（刚下的可能还没装）
-min_installer_age_days: 14
-
-# ---------- 卸载注册表 DisplayName 匹配不到时的别名表 ----------
-# 产品名: [实际安装目录名 / 进程名]
+# Installer detection
+min_installer_size_bytes: 8388608      # 8 MB  /  低于此值不作为候选
+min_installer_age_days: 14             # 只管「未确认已装」的；已确认已装的不看年龄
+                                        # only for UNCONFIRMED installers; confirmed ones ignore age
+# 已装/未装的判定：进程名 + 安装目录 + 卸载注册表，三处都命中才算已装
+# "installed" requires all three: running process, install dir, uninstall registry
 installed_aliases:
-  OfficeAce: ["OfficeClaw"]
+  OfficeAce: ["OfficeClaw"]            # 安装包叫 A，实际装在 B
   Chrome: ["Google Chrome"]
   Feishu: ["Lark", "Feishu", "LarkShell"]
 
-# ---------- AI Agent 配置（判断哪些插件缓存还在用） ----------
+# ---------- AI Agent 缓存 ----------
+# 只有不在 plugin 列表里的包才会被报成「未启用的插件缓存」。
+# Only packages absent from the plugin list are reported as unused.
 agent_configs:
   - path: "%USERPROFILE%/.config/opencode/opencode.jsonc"
   - path: "%USERPROFILE%/.config/opencode/opencode.json"
-
-# opencode 自己的包缓存目录
 agent_cache_root: "%USERPROFILE%/.cache/opencode/packages"
-
-# 全局 npm 包（只读展示）
+# 全局 npm 包（只读展示，不提供删除）
+# Global npm packages — read-only listing, no delete offered
 global_npm_root: "%APPDATA%/npm/node_modules"
 
-# ---------- 自定义缓存目录（直接进结果，零代码） ----------
+# ---------- 天龄阈值 ----------
+# Age thresholds
+temp_min_age_days: 7                   # 过期临时文件；目录里有 exe 在跑会额外标为需确认
+                                        # stale temp files; dirs with a running exe get flagged
+temp_roots:
+  - "%LOCALAPPDATA%/Temp"
+stale_clone_days: 60                   # 无远程的本地 clone 至少闲置这么久
+                                        # local clones with no remote, idle this long
+
+# ---------- 自定义缓存目录：加任何目录进来就是一条规则，零代码 ----------
+# Custom caches: dropping a directory in here is a complete rule, zero code
+# risk: safe=默认勾选 / caution=不勾选且需二次确认
+# risk: safe = pre-checked / caution = not pre-checked, needs confirmation
 custom_cache:
-  - name: "pip 下载缓存"
+  - name: "pip 下载缓存 / pip cache"
     path: "%LOCALAPPDATA%/pip/Cache"
     risk: safe
-    note: "pip 下载的 wheel 缓存，删了重新下载即可。"
-  - name: "HiBit 卸载报告"
-    path: "D:/my tools/HiBitUninstaller/HiBitUninstaller/Uninstaller/Reports"
-    risk: safe
-    note: "HiBit 的历史卸载日志，纯文本记录，无保留价值。"
-  - name: "Windows 缩略图缓存"
+    note: "删了重新下载即可 / re-downloads if needed"
+
+  - name: "Windows 缩略图缓存 / thumbnail cache"
     path: "%LOCALAPPDATA%/Microsoft/Windows/Explorer"
     risk: safe
-    note: "资源管理器缩略图缓存，会自动重建。"
-  - name: "崩溃转储"
+    note: "thumbcache_*.db，会自动重建 / rebuilt automatically"
+
+  - name: "崩溃转储 / crash dumps"
     path: "%LOCALAPPDATA%/CrashDumps"
     risk: safe
-    note: "程序崩溃转储文件。"
-  - name: "HiBit 注册表清理备份"
+    note: "程序崩溃转储 / program crash dumps"
+
+  - name: "HiBit 注册表清理备份 / HiBit registry backup"
     path: "D:/my tools/HiBitUninstaller/HiBitUninstaller/Registry Cleaner/Backup"
     risk: caution
-    note: "注册表清理前的回滚快照。确认清理没问题后即可删。"
+    note: "清理前的回滚快照，确认没问题后即可删 / rollback snapshot, safe to drop once you're happy"
+
+# ---------- 追加传统垃圾目录 ----------
+# Extra traditional-junk directories
+extra_junk:
+  - name: "HiBit 卸载报告 / HiBit uninstall logs"
+    path: "D:/my tools/HiBitUninstaller/HiBitUninstaller/Uninstaller/Reports"
+    note: "纯文本操作记录，无保留价值 / plain text logs, no lasting value"
 
 # ---------- 扫描行为 ----------
+# Scan behaviour
 scan_options:
-  max_recursion_depth: 10
+  max_recursion_depth: 10              # 递归上限；调小能提速，代价是漏掉深层目录
+                                        # recursion cap; lower is faster, misses deep paths
   skip_dirs_with_access_error: true
-  min_size_bytes: 2097152            # 2 MB，低于此不显示
+  min_size_bytes: 2097152              # 2 MB，低于此值不显示
+                                        # items below this aren't shown
+                                        # 注册表/空文件类按条目数计，不受此值影响
+                                        # registry/empty-file items are counted by entry and
+                                        # are NOT affected by this
+empty_scan_dirs: true                  # 关掉就只查空文件不查空目录
+                                        # set false to skip empty-directory detection
 
-theme: "Tokyo Night"
+# ---------- 逐层删空目录（caution）----------
+# Delete empty directories too (caution)

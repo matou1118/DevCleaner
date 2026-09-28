@@ -1,0 +1,47 @@
+name: Feature request
+description: A new detection category, a config key, an interface capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: How do you work around it today?
+      description: Describe the annoyance and your current workaround first. That's more useful
+        than a bare request.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like
+      placeholder: Detect and clean up X
+    validations:
+      required: true
+
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Criteria
+      description: |
+        Cleanup requests **must** include a criterion that can be verified automatically.
+        "Looks like junk" is not a criterion.
+
+        Counter-example: delete node_modules.
+        Example: delete a repo when **all** of these hold — no remote configured, untouched for
+        60 days, `git status --porcelain` empty.
+
+        Vague criteria are the single biggest risk in this project: deleting something in use costs
+        far more than leaving a few hundred MB on disk. Requests without clear criteria usually get
+        asked to supply one.
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: How common is this data, and roughly how large?
+      placeholder: Every machine with VS Code installed, 0.5-3 GB each
+    validations:
+      required: false

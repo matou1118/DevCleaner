@@ -1,0 +1,95 @@
+name: Bug report
+description: Wrong results, false positives, flicker, crashes
+labels: ["bug", "needs-repro"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug.
+
+        **For a cleaner, the criterion matters more than the symptom.** If the report is
+        "not detected" or "false positive", please use this template. If it's about UI stutter or
+        flicker, a screen recording or frame capture is essential — "it flickers" can't be
+        diagnosed from words.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What actually happened
+      description: Include what you expected — the gap between the two is the bug.
+      placeholder: |
+        Example: CodeArts-0.1.26-x64-prod.exe (227 MB) in Downloads was not listed as
+        cleanable, even though the program is installed at %LOCALAPPDATA%\Programs\CodeArts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scanner
+    attributes:
+      label: Which kind of problem is this?
+      options:
+        - Not detected (missed)
+        - False positive (should not have appeared)
+        - Deletion failed / deleted the wrong thing
+        - UI stutter, flicker, broken layout
+        - Crash
+        - Theme / colours render wrong
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: path
+    attributes:
+      label: Relevant path
+      description: The full path involved. This is what makes it reproducible — please don't redact it.
+      placeholder: D:\Users\you\Downloads\CodeArts-0.1.26-x64-prod.exe
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant settings.yaml excerpt
+      description: Only the keys that matter here (scan_roots / exclude_* / installed_aliases / …).
+      render: yaml
+
+  - type: input
+    id: win
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2 (22631)
+    validations:
+      required: true
+
+  - type: input
+    id: py
+    attributes:
+      label: DevCleaner version
+      description: Shown in the title bar and bottom-right corner as v0.x.x
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: How are you running it?
+      options: [downloaded exe, gui.py from source, app.py from source]
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Contents of the "日志" / "Log" button in the footer.
+      render: text
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: For detection bugs
+      options:
+        - label: I've confirmed this is a detection problem, not my own exclude_* misconfiguration
+          required: true

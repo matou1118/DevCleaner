@@ -2,6 +2,7 @@
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -548,6 +549,31 @@ def t_clone_guard(tmp):
         assert str(good) not in cands, "有 remote 的仓库被列为可删！"
     finally:
         app.CFG = old
+        _drop_git_cache(good)
+
+
+def _drop_git_cache(d: Path) -> None:
+    """git 会在 .git 里留 index.lock / pack 文件，rmtree 删不干净，
+    于是每次跑自检都在 %TEMP% 堆一个仓库。Windows 上 git 短暂持锁，
+    先重试再强删。"""
+    import gc
+    import stat
+    import time
+    for attempt in range(3):
+        try:
+            shutil.rmtree(d)
+            return
+        except OSError:
+            gc.collect()
+            time.sleep(0.4 * (attempt + 1))
+
+    def force(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except OSError:
+            pass
+    shutil.rmtree(d, onerror=force)
 
 
 def t_no_repolish_on_check():
@@ -766,6 +792,40 @@ def t_console_encoding_safe():
 
 
 # ---------------- 仓库链接 ----------------
+def t_no_test_crash_left_behind():
+    """自检不能往 %TEMP% 里堆垃圾。
+
+    t_clone_guard 每次建一个 git 仓库，.git 里的 index.lock / pack 文件
+    会让 shutil.rmtree 失败，于是每跑一次自检就往 Temp 里留一个仓库。
+    堆几百个以后，DevCleaner 自己的只读清单里全是 withremote —— 很难看，
+    而且 Temp 会被撑大。
+    """
+    import glob
+    import tempfile
+    pats = [os.path.join(tempfile.gettempdir(), "devcleaner_test_*")]
+    before = sum(len(glob.glob(p)) for p in pats)
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONIOENCODING"}
+    env["PYTHONIOENCODING"] = ""
+    r = subprocess.run([sys.executable, "-c",
+                        "import sys;sys.path.insert(0,'.');import test_app as T;"
+                        "import tempfile,pathlib;"
+                        "T.t_clone_guard(pathlib.Path(tempfile.mkdtemp()))"],
+                       capture_output=True, text=True, errors="replace",
+                       timeout=300, env=env)
+    after = sum(len(glob.glob(p)) for p in pats)
+    assert r.returncode == 0, r.stdout[-300:] + r.stderr[-300:]
+    assert after <= before + 1, \
+        f"自检残留了临时目录：跑之前 {before} 个，跑之后 {after} 个"
+    # 顺手清掉历史堆积（只清本测试自己建的，不碰别的 devcleaner_test_*）
+    for p in pats:
+        for d in glob.glob(p):
+            try:
+                _drop_git_cache(Path(d))
+            except OSError:
+                pass
+
+
+# ---------------- 仓库链接 ----------------
 def t_no_placeholder_left():
     """OWNER / TODO / FIXME / example.com 之类占位符漏一个就是坏链接"""
     root = Path(__file__).parent
@@ -833,6 +893,61 @@ def t_repo_links_consistent():
             if not (base / m).is_file():
                 bad_img.append(f"{p.name} -> {m}")
     assert not bad_img, "图片引用失效:\n  " + "\n  ".join(bad_img)
+
+
+# ---------------- 双语文档 ----------------
+def t_docs_bilingual():
+    """面向人的文档必须有英文版。
+
+    这是明确要求：不要只做中文说明。少一个英文版就是国际用户完全读不懂。
+    """
+    root = Path(__file__).parent
+    # 中文文件 -> 必须存在的英文版
+    PAIRS = {
+        "README.md": "README.en.md",
+        "CHANGELOG.md": "CHANGELOG.en.md",
+        "CONTRIBUTING.md": "CONTRIBUTING.en.md",
+        "SECURITY.md": "SECURITY.en.md",
+        "CODE_OF_CONDUCT.md": "CODE_OF_CONDUCT.en.md",
+        "docs/usage.md": "docs/usage.en.md",
+        "docs/Screenshots.md": "docs/Screenshots.en.md",
+        ".github/ISSUE_TEMPLATE/bug_report.yml":
+            ".github/ISSUE_TEMPLATE/bug_report.en.yml",
+        ".github/ISSUE_TEMPLATE/feature_request.yml":
+            ".github/ISSUE_TEMPLATE/feature_request.en.yml",
+        ".github/ISSUE_TEMPLATE/CONTRIBUTING_HINT.md":
+            ".github/ISSUE_TEMPLATE/CONTRIBUTING_HINT.en.md",
+    }
+    missing = []
+    for zh, en in PAIRS.items():
+        zp, ep = root / zh, root / en
+        if not zp.is_file():
+            missing.append(f"{zh}（中文版没了）")
+            continue
+        if not ep.is_file():
+            missing.append(f"{en}（缺英文版）")
+            continue
+        if ep.stat().st_size < 1200:
+            missing.append(f"{en} 只有 {ep.stat().st_size} 字节，像占位符")
+    assert not missing, "文档不成双语:\n  " + "\n  ".join(missing)
+
+    # settings.yaml 用户直接改，注释必须中英并列
+    s = (root / "settings.yaml").read_text(encoding="utf-8")
+    cjk = sum(1 for ch in s if "\u4e00" <= ch <= "\u9fff")
+    assert cjk > 100, "settings.yaml 的中文注释太少了"
+    assert "/" in s, "settings.yaml 应该用中英并排的注释（出现 / 分隔）"
+
+    # 英文版不应残留中文正文（链接和代码块除外）
+    for _, en in PAIRS.items():
+        p = root / en
+        if not p.is_file():
+            continue
+        txt = p.read_text(encoding="utf-8")
+        body = "\n".join(l for l in txt.splitlines()
+                          if not l.strip().startswith(("```", "    ", "|", ">")))
+        cjk = sum(1 for ch in body if "\u4e00" <= ch <= "\u9fff")
+        ratio = cjk / max(len(body), 1)
+        assert ratio < 0.02, f"{en} 正文里中文占比 {ratio:.1%}，翻译没跟上"
 
 
 # ---------------- 文档 ----------------
@@ -940,6 +1055,8 @@ if __name__ == "__main__":
         check("内部协议串不外泄", t_no_internal_protocol_leak)
         check("说明文件齐全", t_docs_present)
         check("非 UTF-8 控制台不崩", t_console_encoding_safe)
+        check("自检不留垃圾目录", t_no_test_crash_left_behind)
+        check("文档双语齐全", t_docs_bilingual)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

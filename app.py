@@ -1692,11 +1692,18 @@ if __name__ == "__main__":
     _ap.add_argument("--json-indent", type=int, default=2, help="JSON 缩进")
     _a = _ap.parse_args()
 
-    print(f"{APP_NAME} {__version__}  配置: {resource('settings.yaml')}")
+    def _say(msg: str) -> None:
+        """--json 模式下不能往前置任何东西，否则输出就不是合法 JSON 了"""
+        if not _a.json:
+            print(msg)
+
+    _say(f"{APP_NAME} {__version__}  配置: {resource('settings.yaml')}")
     if _a.min_age is not None:
         CFG["temp_min_age_days"] = _a.min_age
         CFG["min_installer_age_days"] = _a.min_age
-    print(f"扫描根: {CFG['scan_roots']}\n")
+    _say(f"扫描根: {CFG['scan_roots']}")
+    if not _a.json:
+        print()
 
     if _a.category:
         keep = [s for s in SCANNERS if _a.category in s.category]
