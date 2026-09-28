@@ -29,6 +29,10 @@ _EN: Dict[str, str] = {
     "（已不存在）": " (no longer exists)",
     "（被进程占用）": " (locked by a running process)",
 
+    # ---- 确认对话框 ----
+    "取消": "Cancel",
+    "… 另有": "... plus",
+
     # ---- 风险等级 ----
     "安全": "Safe",
     "需确认": "Needs review",

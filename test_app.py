@@ -1121,14 +1121,22 @@ def t_web_site():
               if u != "matou1118"]
     assert not others, f"链接指向了别人的仓库: {set(others)}"
 
-    # 引用的本地资源必须真的存在
+    # 引用的本地资源必须真的存在（Pages 上是 gh-pages 分支，图片随站点走，
+    # 所以路径必须是 web/ 内部的相对路径，不能 ../docs/）
     for page_name, page in (("index.html", idx), ("index.zh.html", zh)):
         for m in _re.findall(r'(?:src|href)="([^"]+)"', page) + \
                  _re.findall(r"fetch\('([^']+)'\)", page):
             if m.startswith(("http", "#", "data:", "/")):
                 continue
+            assert not m.startswith(".."), \
+                f"{page_name} 引用了站点外的 {m} —— GitHub Pages 上会 404"
             assert (web / m).resolve().exists(), \
                 f"{page_name} 引用了不存在的文件: {m}"
+
+    # Pages 必备：根 404.html，以及中英互链
+    assert (web / "404.html").is_file(), "缺 404.html（Pages 会用它兜底）"
+    assert "index.zh.html" in idx, "英文版没链到中文版"
+    assert "index.html" in zh, "中文版没链回英文版"
 
     # 对比度：把 CSS 变量解析出来，逐对算（中英文两版都要）
     for label, page in (("en", idx), ("zh", zh)):
@@ -1285,6 +1293,95 @@ def t_no_console_flash():
     src = (root / "app.py").read_text(encoding="utf-8")
     assert "CREATE_NO_WINDOW" in src, "app.py 里没有 CREATE_NO_WINDOW"
     assert "STARTF_USESHOWWINDOW" in src, "缺少 STARTUPINFO 兜底"
+
+
+def t_confirm_dialog_scrolls():
+    """确认对话框的明细必须可滚动，且按钮永远在屏幕内。
+
+    这是个真 bug：原来用 QMessageBox.setInformativeText 塞明细，它没有滚动条。
+    条目一多（最多列 40 条）整个对话框撑出屏幕，**确认按钮被顶到看不见的地方** ——
+    用户要么找不到按钮，要么瞎点。
+
+    现在用自建的 ConfirmDialog：明细在 QTextEdit 里（自带滚动条），
+    高度按屏幕可用高度封顶。
+    """
+    import gui
+    from PySide6.QtWidgets import QApplication, QTextEdit
+    qa = QApplication.instance() or QApplication([])
+    w = gui.MainWindow()
+    w._remember = False
+    w.apply_theme(w.cb_theme.currentIndex())
+
+    # 造一堆很长的路径，逼出溢出条件
+    class Fake:
+        def __init__(self, n):
+            self.name = f"条目 {n} " + "很长的名字" * 6
+            self.path = "BULK:x"
+            self.size = 123456789
+            self.unit = "bytes"
+            self.risk = "safe"
+    sel = [Fake(i) for i in range(80)]
+
+    detail = gui._confirm_details(sel[:60])
+    assert detail.count("·") == 60, "明细条数不对"
+    dlg = gui.ConfirmDialog(w, "确认清理", "确认清理 80 项？", detail,
+                            gui._confirm_risky([Fake(1), Fake(2)]))
+    scr = QApplication.primaryScreen()
+    avail = scr.availableGeometry().height() if scr else 800
+    cap = int(avail * gui.ConfirmDialog.MAX_H)
+
+    view = dlg.findChild(QTextEdit)
+    assert view is not None, "明细区不是 QTextEdit（就没有滚动条）"
+    assert view.isReadOnly(), "明细区必须只读，防止误改内容"
+    assert view.height() <= cap, \
+        f"明细区 {view.height()}px 超过上限 {cap}px，会把按钮顶出屏幕"
+    assert view.height() >= 160, "明细区太小，正常的少量条目也看不全"
+
+    # 确认/取消按钮必须存在且可点
+    btns = dlg.findChildren(type(dlg.findChildren(gui.QPushButton)[0])) if False else None
+    from PySide6.QtWidgets import QPushButton
+    texts = [b.text() for b in dlg.findChildren(QPushButton)]
+    assert any("取消" in t for t in texts), f"没有取消按钮: {texts}"
+    assert any("确认清理" in t for t in texts), f"没有确认按钮: {texts}"
+    dlg.close()
+    w.close()
+
+
+def t_license_attribution():
+    """许可必须是 CC BY-NC 4.0：署名 + 禁商用 + 可二开。"""
+    root = Path(__file__).parent
+    lic = (root / "LICENSE").read_text(encoding="utf-8")
+    low = lic.lower()
+    assert "CC BY-NC 4.0" in lic, "LICENSE 里没有 CC BY-NC 4.0"
+    assert "Matou1118" in lic, "LICENSE 里没写原作者"
+    for must, why in (("noncommercial", "禁商用条款缺失"),
+                      ("commercial", "禁商用说明缺失"),
+                      ("attribution", "署名条款缺失"),
+                      ("derivative", "二次开发/衍生作品条款缺失"),
+                      ("by-nc", "署名+禁商用组合许可标识缺失")):
+        assert must in low, f"LICENSE 缺 {must}（{why}）"
+
+    # README 徽章和许可段落都要跟上
+    for name in ("README.md", "README.en.md"):
+        t = (root / name).read_text(encoding="utf-8")
+        assert "CC BY-NC 4.0" in t, f"{name} 没写 CC BY-NC 4.0"
+        assert "MIT" not in t.replace("emits", ""), f"{name} 还残留 MIT"
+
+    # 界面 tooltip 也要说清署名和禁商用
+    src = (root / "gui.py").read_text(encoding="utf-8")
+    assert "CC BY-NC 4.0" in src, "界面 tooltip 没提许可"
+    assert "Non-commercial" in src or "禁商用" in src, "界面 tooltip 没提禁商用"
+
+    # 底栏署名必须还在（署名义务的体现）
+    import gui
+    from PySide6.QtWidgets import QApplication
+    qa = QApplication.instance() or QApplication([])
+    w = gui.MainWindow()
+    w._remember = False
+    w.apply_theme(w.cb_theme.currentIndex())
+    assert "Matou1118" in w.ver.text(), w.ver.text()
+    assert app.REPO in w.ver.text(), w.ver.text()
+    w.close()
 
 
 # ---------------- 双语文档 ----------------
@@ -1457,6 +1554,8 @@ if __name__ == "__main__":
         check("扫描期重绘限频（进度条保留）", t_scan_paint_throttled)
         check("底栏署名+GitHub 链接+版本号", t_byline_version_link)
         check("子进程不闪控制台窗口", t_no_console_flash)
+        check("确认弹窗可滚动不溢出", t_confirm_dialog_scrolls)
+        check("许可：署名+禁商用", t_license_attribution)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

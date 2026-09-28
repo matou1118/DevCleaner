@@ -7,10 +7,11 @@ from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPalette
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
-                               QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-                               QPushButton, QScrollArea, QSizePolicy, QTextEdit,
-                               QVBoxLayout, QWidget, QProgressBar)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
+                               QFrame, QHBoxLayout, QLabel, QMainWindow,
+                               QMessageBox, QPushButton, QScrollArea,
+                               QSizePolicy, QTextEdit, QVBoxLayout, QWidget,
+                               QProgressBar)
 
 import app as engine
 import lang
@@ -120,6 +121,11 @@ QProgressBar::chunk {{ background:{t['accent']}; border-radius:4px; }}
 
 QTextEdit {{ background:{t['panel']}; border:1px solid {t['line']}; border-radius:8px;
              color:{t['fg2']}; font-family:Consolas,monospace; font-size:11px; }}
+/* 确认对话框的明细区：要比正文大一点，等宽，方便对路径 */
+QTextEdit#detail {{ font-size:12px; color:{t['fg']}; }}
+QPushButton#dangerOk {{ background:{t['caution']}; border-color:{t['caution']};
+                       color:{t['bg']}; font-weight:700; padding:8px 22px; }}
+QPushButton#dangerOk:hover {{ opacity:.9; }}
 
 QScrollBar:vertical {{ background:transparent; width:11px; margin:2px; }}
 QScrollBar::handle:vertical {{ background:{t['line2']}; border-radius:5px; min-height:36px; }}
@@ -483,7 +489,10 @@ class MainWindow(QMainWindow):
         fl.addWidget(self.foot)
         # 署名 + 可点的 GitHub 链接。点开用系统默认浏览器，不在应用内导航。
         self.ver = _lbl(f"{engine.OWNER} {T('GitHub')} v{engine.__version__}", "catHint")
-        self.ver.setToolTip(f"{engine.REPO}  ·  MIT License")
+        self.ver.setToolTip(
+            f"{engine.REPO}\n"
+            f"CC BY-NC 4.0 · 署名 Matou1118 · 禁商用\n"
+            f"Attribution required · Non-commercial only")
         self.ver.setCursor(Qt.CursorShape.PointingHandCursor)
         self.ver.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextBrowserInteraction)
@@ -728,84 +737,155 @@ class MainWindow(QMainWindow):
             return
         risky = [i for i in sel if i.risk == "caution"]
         regs = [i for i in sel if i.path.startswith("REG:")]
-        lines = "\n".join(f"· {i.name}  {fmt(i)}\n  {_human_path(i)}"
-                          for i in sel[:40])
-        if len(sel) > 40:
-            lines += f"\n… 另有 {len(sel) - 40} 项"
-        msg = QMessageBox(self)
-        msg.setWindowTitle(T("确认清理"))
-        msg.setIcon(QMessageBox.Icon.Warning)
+        # 明细最多列 60 条，剩下的在末尾汇总 —— 列表可滚动了，不用那么保守
+        detail = _confirm_details(sel[:60])
+        if len(sel) > 60:
+            detail += f"\n{T('… 另有')} {len(sel) - 60} {T('项')}"
+
         if regs:
-            msg.setText(T(f"确认清理 {len(sel)} 项，其中 {len(regs)} 项是注册表修改？"))
-            msg.setInformativeText(T(
+            summary = T(f"确认清理 {len(sel)} 项，其中 {len(regs)} 项是注册表修改？")
+            note = T(
                 f"文件类会移入回收站（可还原）。\n"
                 f"注册表类会先备份 .reg 到\n{engine.backup_root()}\n"
                 f"再删除，导出失败则不会删除。还原方式：对备份目录里的 .reg 执行 reg import。\n\n")
-                + lines)
+            dlg = ConfirmDialog(self, T("确认清理"), summary,
+                                note + detail, _confirm_risky(risky), danger=bool(regs))
         else:
             extra = T("其中包含批量删除，请注意条目数。") if any(
                 i.path.startswith("BULK:") for i in sel) else ""
-            msg.setText(T(f"确认清理 {len(sel)} 个条目，"
-                        f"合计 {_mix([i.size for i in sel], [getattr(i, 'unit', 'bytes') for i in sel])}？{extra}"))
-            msg.setInformativeText(T("将移入 Windows 回收站，可在「回收站」中还原。\n\n") + lines)
-        if risky:
-            msg.setStandardButtons(QMessageBox.StandardButton.Cancel
-                                   | QMessageBox.StandardButton.Ok)
-            msg.setText(T(msg.text() +
-                        f"\n\n⚠ 其中 {len(risky)} 项标记为「需确认」：\n")
-                        + "\n".join("· " + i.name for i in risky[:8])
-                        + ("\n… 另有 " + str(len(risky) - 8) + " 项" if len(risky) > 8 else ""))
-            ok = msg.exec()
-        else:
-            ok = msg.exec() == QMessageBox.StandardButton.Ok
-        if ok != QMessageBox.StandardButton.Ok:
+            summary = T(f"确认清理 {len(sel)} 个条目，"
+                        f"合计 {_mix([i.size for i in sel], [getattr(i, 'unit', 'bytes') for i in sel])}？{extra}")
+            dlg = ConfirmDialog(self, T("确认清理"), summary, detail,
+                                _confirm_risky(risky), danger=bool(risky))
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
-        self.btn_clean.setEnabled(False)
-        self.setCursor(Qt.CursorShape.WaitCursor)
-        ok_n: List[str] = []
-        fail: List[str] = []
-        backups: List[str] = []
-        for i in sel:
-            if i.path.startswith("REG:"):
-                good, msg = engine.apply_registry_item(i)
+            self.btn_clean.setEnabled(False)
+            self.setCursor(Qt.CursorShape.WaitCursor)
+            ok_n: List[str] = []
+            fail: List[str] = []
+            backups: List[str] = []
+            for i in sel:
+                if i.path.startswith("REG:"):
+                    good, msg = engine.apply_registry_item(i)
+                    if good:
+                        ok_n.append(i.name)
+                        if "备份" in msg:
+                            backups.append(msg.split("备份", 1)[1].strip())
+                    else:
+                        fail.append(f"{i.name}（{msg}）")
+                    continue
+                if i.path.startswith("BULK:"):
+                    a, b, errs = engine.delete_bulk(i.path)
+                    ok_n.append(f"{i.name}（{a} 项）")
+                    if b:
+                        fail.extend(errs[:5])
+                    continue
+                p = Path(i.path)
+                if not p.exists():
+                    fail.append(f"{i.name}（已不存在）")
+                    continue
+                if engine.file_locked(p):
+                    fail.append(f"{i.name}（被进程占用）")
+                    continue
+                good, msg = engine.to_recycle_bin(i.path)
                 if good:
                     ok_n.append(i.name)
-                    if "备份" in msg:
-                        backups.append(msg.split("备份", 1)[1].strip())
                 else:
                     fail.append(f"{i.name}（{msg}）")
-                continue
-            if i.path.startswith("BULK:"):
-                a, b, errs = engine.delete_bulk(i.path)
-                ok_n.append(f"{i.name}（{a} 项）")
-                if b:
-                    fail.extend(errs[:5])
-                continue
-            p = Path(i.path)
-            if not p.exists():
-                fail.append(f"{i.name}（已不存在）")
-                continue
-            if engine.file_locked(p):
-                fail.append(f"{i.name}（被进程占用）")
-                continue
-            good, msg = engine.to_recycle_bin(i.path)
-            if good:
-                ok_n.append(i.name)
-            else:
-                fail.append(f"{i.name}（{msg}）")
-        self.unsetCursor()
-        report = [f"成功 {len(ok_n)} 项"]
-        if backups:
-            report.append("\n注册表备份位置：\n" + "\n".join(sorted(set(backups))))
-        if ok_n and not regs:
-            report.append("\n文件已进入回收站，清空回收站后才会真正释放空间。")
-        if fail:
-            report.append(f"\n未处理 {len(fail)} 项：\n· " + "\n· ".join(fail[:15]))
-        QMessageBox.information(self, T("清理结果"), "\n".join(report))
-        self.bulk(False)
-        self._render()
-        self.recalc()
+            self.unsetCursor()
+            report = [f"成功 {len(ok_n)} 项"]
+            if backups:
+                report.append("\n注册表备份位置：\n" + "\n".join(sorted(set(backups))))
+            if ok_n and not regs:
+                report.append("\n文件已进入回收站，清空回收站后才会真正释放空间。")
+            if fail:
+                report.append(f"\n未处理 {len(fail)} 项：\n· " + "\n· ".join(fail[:15]))
+            QMessageBox.information(self, T("清理结果"), "\n".join(report))
+            self.bulk(False)
+            self._render()
+            self.recalc()
+
+
+class ConfirmDialog(QDialog):
+    """确认清理对话框，明细列表可上下滚动。
+
+    为什么不用 QMessageBox：它的 setInformativeText 没有滚动条，条目一多
+    （这里最多列 40 条）整个对话框就撑到超出屏幕，**确认按钮被顶到看不见
+    的地方** —— 用户要么看不到按钮，要么瞎点。而且 QMessageBox 的高度没法
+    跟屏幕尺寸挂钩。
+
+    这里的做法：明细放 QTextEdit（自带滚动条 + 只读 + 可选中复制路径），
+    对话框高度按屏幕可用高度算一个上限，永远保证按钮在可视区内。
+    """
+
+    MAX_H = 0.72          # 占屏幕高度比例上限
+
+    def __init__(self, parent, title: str, summary: str, detail: str,
+                 risky: str = "", danger: bool = False):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(560)
+
+        v = QVBoxLayout(self)
+        v.setContentsMargins(20, 18, 20, 16)
+        v.setSpacing(10)
+
+        head = _lbl(summary, "itemName")
+        head.setWordWrap(True)
+        v.addWidget(head)
+
+        if risky:
+            rl = _lbl(risky, "itemErr")
+            rl.setWordWrap(True)
+            v.addWidget(rl)
+
+        if detail:
+            # QTextEdit 自带滚动条；只读；等宽字体方便对路径
+            self.view = QTextEdit()
+            self.view.setReadOnly(True)
+            self.view.setPlainText(detail)
+            self.view.setObjectName("detail")
+            fm = self.view.document().documentLayout().documentSize()
+            h = int(fm.height()) + 12
+            scr = QApplication.primaryScreen()
+            avail = scr.availableGeometry().height() if scr else 800
+            cap = int(avail * self.MAX_H)
+            self.view.setFixedHeight(max(160, min(h, cap)))
+            v.addWidget(self.view, 1)
+
+        buttons = QHBoxLayout()
+        buttons.setSpacing(9)
+        buttons.addStretch(1)
+        b_cancel = QPushButton(T("取消"))
+        b_cancel.clicked.connect(self.reject)
+        b_ok = QPushButton(T("确认清理"))
+        b_ok.setObjectName("dangerOk" if danger else "primary")
+        b_ok.setDefault(True)
+        b_ok.clicked.connect(self.accept)
+        buttons.addWidget(b_cancel)
+        buttons.addWidget(b_ok)
+        v.addLayout(buttons)
+
+
+def _confirm_details(sel) -> str:
+    """明细文本：每条两行（名字+大小 / 完整路径）。"""
+    out = []
+    for i in sel:
+        out.append(f"· {i.name}  {fmt(i)}")
+        out.append(f"  {_human_path(i)}")
+    return "\n".join(out)
+
+
+def _confirm_risky(risky) -> str:
+    if not risky:
+        return ""
+    names = "\n".join("· " + i.name for i in risky[:12])
+    more = (f"\n{T('… 另有')} {len(risky) - 12} {T('项')}" if len(risky) > 12 else "")
+    return T(f"⚠ 其中 {len(risky)} 项标记为「需确认」：\n") + names + more
+
+
 
 
 def main() -> int:

@@ -4,7 +4,7 @@ A local disk cleaner for Windows. Native window (PySide6), single-file exe. **Wo
 
 [![CI](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-E0af68.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://learn.microsoft.com/windows/)
 
 **Current version v0.1.0** · [中文](README.md) · [📖 Usage guide](docs/usage.en.md) · [📷 All screenshots](docs/Screenshots.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.en.md) · [Security](SECURITY.en.md)
@@ -210,4 +210,12 @@ If it saved you some time:
 
 ## License
 
-[MIT](LICENSE) © DevCleaner contributors
+## License
+
+**[CC BY-NC 4.0](LICENSE) — attribution (Matou1118), non-commercial**
+
+- **You may** modify it, build on it, ship your own version
+- **You must** credit Matou1118, keep the licence notice, and say whether you changed it
+- **You may not** use it commercially - a free fork is fine; selling it, bundling it
+  into a paid product, or monetising it with ads is not
+- If unsure, [open an issue](https://github.com/matou1118/DevCleaner/issues) and ask

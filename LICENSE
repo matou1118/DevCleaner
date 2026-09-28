@@ -1,21 +1,46 @@
-MIT License
+Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
+=======================================================================
 
-Copyright (c) 2026 DevCleaner contributors
+作者 / Author:  Matou1118
+项目 / Project: DevCleaner
+主页 / Home:    https://github.com/matou1118/DevCleaner
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+你被允许做 / You MAY:
+  - 复制和分发本作品
+  - 修改本作品（可二次开发、可做衍生作品 / modify, remix, or build upon）
+  - 商业性使用以外的任何用途
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+你必须做 / You MUST:
+  - **署名**：在所有副本和衍生作品里注明原作者 Matou1118
+  - **保留许可声明**：原样保留本文件或指向它
+  - **注明是否修改**（derivative works 需说明改动）：如果做了修改，要说明改动过（不强制开源，但不得暗示原作者背书）
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+你不能做 / You MAY NOT:
+  - **任何商业用途** —— 包括但不限于：售卖、出租、订阅收费、广告变现、
+    打包进付费产品、用于营利性服务、接受赞助作为唯一分发渠道
+  - 暗示原作者为你的产品背书或提供担保
+  - 在法律上增加或限制本许可未授予的使用限制
+
+非商业 / NonCommercial:
+  NC 的判定看**用途**不看用途方。个人学习、研究、修改、分享、公益使用
+  均为非商业。公司内部使用、个人商用盈利、任何产生直接或间接经济利益
+  的使用，均为商业用途。
+
+  ⚠ 拿不准就问我。书面许可：https://github.com/matou1118/DevCleaner/issues
+
+署名方式 / Attribution:
+  在你的 README、二次开发说明、About 页面或发布说明里保留：
+      "基于 DevCleaner (Matou1118) 修改
+       https://github.com/matou1118/DevCleaner"
+  应用界面内建议保留底栏署名（原版已内置 "Matou1118 GitHub vX.Y.Z"）。
+
+第三方组件 / Third-party components:
+  - 本项目不包含任何音频/注册表等第三方代码。
+  - ffmpeg 由使用者自行安装，本项目不分发，不受本许可约束。
+    ffmpeg 自身为 LGPL v2.1+ / GPL v2+（视构建而定）。
+  - PySide6 (Qt for Python) 遵循 LGPL v3，见 https://www.qt.io/licensing/
+
+完整条款 / Full legal text:
+  https://creativecommons.org/licenses/by-nc/4.0/legalcode
+  （简体中文译本仅供参考，以英文原版为准）
+  https://creativecommons.org/licenses/by-nc/4.0/deed.zh-hans

@@ -4,7 +4,7 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 
 [![CI](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-E0af68.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://learn.microsoft.com/windows/)
 
 **当前版本 v0.1.0** · [English](README.en.md) · [📖 使用说明](docs/usage.md) · [📷 全部截图](docs/Screenshots.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
@@ -210,4 +210,11 @@ Temp 里的东西全部在 7 天内，其中 121 MB 是正在运行的 PyInstall
 
 ## License
 
-[MIT](LICENSE) © DevCleaner contributors
+## 许可证
+
+**[CC BY-NC 4.0](LICENSE) — 署名（Matou1118）· 禁商用**
+
+- **可以**改、可以二次开发、可以做成自己的版本
+- **必须**署名原作者 Matou1118，保留许可声明，注明是否修改
+- **不能**商用 —— 不收费的修改版随便用；收费、打包进付费产品、接广告都不行
+- 拿不准就[开个 issue 问](https://github.com/matou1118/DevCleaner/issues)
