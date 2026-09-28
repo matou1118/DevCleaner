@@ -1236,10 +1236,12 @@ def registry_findings() -> List[Item]:
                         continue
                     us = _value(hive, full, "UninstallString")
                     il = _value(hive, full, "InstallLocation")
-                    bad = _exe_missing(us)
-                    if not bad and il and len(il.strip()) > 3:
-                        bad = not os.path.isdir(il.strip())
-                    if not bad:
+                    # 只认「卸载命令里的 exe 不存在」这一个决定性信号。
+                    # 曾经也用 InstallLocation 是否存在来判断，误报了一大片：
+                    # 微信 / VS Installer 的 Uninstall.exe 明明在，只是
+                    # InstallLocation 指向了旧路径。删掉活程序的卸载项 =
+                    # 以后再也卸不掉它，代价远大于收益。
+                    if not _exe_missing(us):
                         continue
                     n, s = _key_stats(hive, full)
                     out.append(Item(
@@ -1247,7 +1249,7 @@ def registry_findings() -> List[Item]:
                         "注册表 · 失效程序",
                         f"REG:delkey:{_hname(hive)}\\{full}", n + s, "caution",
                         f"Uninstall={us or '(无)'}",
-                        "程序文件已不存在。删除前自动导出 .reg 备份。",
+                        "卸载命令指向的 exe 已不存在。删除前自动备份 .reg。",
                         unit="count"))
         except OSError:
             continue

@@ -363,6 +363,43 @@ def t_bulk_empty_delete(tmp):
         app.CFG = old
 
 
+def t_no_false_orphan():
+    """UninstallString 的 exe 还在，就绝不能判成「失效程序」。
+    （曾经用 InstallLocation 是否存在来判断，误报了微信 / VS Installer。）"""
+    import winreg
+    branch = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\DevCleanerFalsePositive"
+    k = winreg.CreateKey(winreg.HKEY_CURRENT_USER, branch)
+    winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, "假阳性测试程序")
+    winreg.SetValueEx(k, "UninstallString", 0, winreg.REG_SZ,
+                      '"C:\\Windows\\System32\\cmd.exe" /c exit')   # 确实存在
+    winreg.SetValueEx(k, "InstallLocation", 0, winreg.REG_SZ,
+                      "D:\\不存在的路径\\XYZ")                    # 故意失效
+    winreg.CloseKey(k)
+    before = [i.name for i in app.registry_findings()]
+    try:
+        assert not any("假阳性测试程序" in n for n in before), \
+            f"InstallLocation 失效但卸载命令有效，被误判了: {before}"
+    finally:
+        app.delete_registry_key("HKCU", branch)
+
+
+def t_real_orphan_detected():
+    """反过来：卸载命令指向不存在的 exe，必须被抓出来"""
+    import winreg
+    branch = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\DevCleanerTrueOrphan"
+    k = winreg.CreateKey(winreg.HKEY_CURRENT_USER, branch)
+    winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, "真孤儿测试程序")
+    winreg.SetValueEx(k, "UninstallString", 0, winreg.REG_SZ,
+                      '"C:\\根本不存在的目录\\unins000.exe"')
+    winreg.SetValueEx(k, "InstallLocation", 0, winreg.REG_SZ, "C:\\Program Files\\Nope")
+    winreg.CloseKey(k)
+    try:
+        names = [i.name for i in app.registry_findings()]
+        assert any("真孤儿测试程序" in n for n in names), f"真孤儿没被抓出来: {names}"
+    finally:
+        app.delete_registry_key("HKCU", branch)
+
+
 # ---------------- 传统垃圾 ----------------
 def t_junk(tmp):
     old = app.CFG
@@ -465,6 +502,8 @@ if __name__ == "__main__":
         check("批量空文件真删", lambda: t_bulk_empty_delete(tmp))
         check("传统垃圾扫描", lambda: t_junk(tmp))
         check("注册表只读发现", t_registry_findings)
+        check("注册表不误判活程序", t_no_false_orphan)
+        check("注册表能抓真孤儿", t_real_orphan_detected)
         check("注册表备份/删除/还原", t_registry_backup_and_restore)
         check("注册表深层删除", t_delete_deep_tree)
         check("注册表路径编码", t_reg_path_parse)
