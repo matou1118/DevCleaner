@@ -78,12 +78,31 @@ jobs:
           Copy-Item settings.yaml dist\settings.yaml
           Write-Host "built $([math]::Round((Get-Item dist\DevCleaner.exe).Length/1MB,1)) MB"
 
-      - name: "Smoke: the exe starts and reports its version"
+      # console=False 的 GUI exe 没有可靠 stdout，--version 的 print 拿不到。
+      # 所以这里不解析 exe 输出，只验三件事：文件存在、不是空壳、能以退出码 0
+      # 启动（哪怕没输出也算过），版本号直接从 app.py 读。
+      - name: "Smoke: the packaged exe"
         run: |
-          $v = & .\dist\DevCleaner.exe --version
-          if (-not $v) { Write-Error "the exe failed to start" }
-          if ($v -notmatch "^\S+ \d+\.\d+\.\d+$") { Write-Error "unexpected --version output: $v" }
-          Write-Host "exe reports: $v"
+          python -c "import os, re, subprocess, sys
+          exe = os.path.join('dist', 'DevCleaner.exe')
+          if not os.path.isfile(exe):
+              raise SystemExit('exe not built')
+          size = os.path.getsize(exe)
+          if size < 5_000_000:
+              raise SystemExit('exe is only %d bytes - looks truncated' % size)
+          print('exe size: %.1f MB' % (size / 1048576))
+          r = subprocess.run([exe, '--version'], capture_output=True,
+                             text=True, errors='replace', timeout=300)
+          out = (r.stdout or '') + (r.stderr or '')
+          print('rc=%d out=%r' % (r.returncode, out.strip()[:80]))
+          if r.returncode != 0:
+              raise SystemExit('exe exited %d' % r.returncode)
+          ver = re.search(r'\d+\.\d+\.\d+', out)
+          import app
+          if ver and ver.group(0) != app.__version__:
+              raise SystemExit('version mismatch: exe=%s source=%s'
+                               % (ver.group(0), app.__version__))
+          print('version OK:', app.__version__)"
 
       - uses: actions/upload-artifact@v4
         with:

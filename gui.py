@@ -735,11 +735,25 @@ class MainWindow(QMainWindow):
 
 
 def main() -> int:
+    # 打包成 console=False 的 GUI exe 后没有真实 stdout，print() 会失败或
+    # 被丢弃。所以 --version/--help 走 stderr（stderr 永远可用）并用退出码
+    # 表达结果；同时尽量也往 stdout 写一份，能写就写。
+    def emit(msg: str) -> None:
+        for name in ("stderr", "stdout"):
+            try:
+                getattr(sys, name).write(msg + "\n")
+                getattr(sys, name).flush()
+            except (OSError, ValueError, AttributeError):
+                pass
+
     if "--version" in sys.argv or "-V" in sys.argv:
-        print(f"{engine.APP_NAME} {engine.__version__}")
+        emit(f"{engine.APP_NAME} {engine.__version__}")
         return 0
     if "--help" in sys.argv or "-h" in sys.argv:
-        print(__doc__ or "")
+        emit("DevCleaner - Windows 本地清理工具\n"
+             "  DevCleaner.exe            打开界面（自动扫描）\n"
+             "  DevCleaner.exe --version  打印版本\n"
+             "配置见 exe 同目录的 settings.yaml")
         return 0
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
     qa = QApplication(sys.argv)

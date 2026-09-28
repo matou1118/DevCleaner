@@ -1697,6 +1697,15 @@ if __name__ == "__main__":
         if not _a.json:
             print(msg)
 
+    def _always(msg: str) -> None:
+        """版本/帮助这类元信息走 stderr：console=False 的 exe 没有可靠 stdout"""
+        for name in ("stderr", "stdout"):
+            try:
+                getattr(sys, name).write(msg + "\n")
+                getattr(sys, name).flush()
+            except (OSError, ValueError, AttributeError):
+                pass
+
     _say(f"{APP_NAME} {__version__}  配置: {resource('settings.yaml')}")
     if _a.min_age is not None:
         CFG["temp_min_age_days"] = _a.min_age

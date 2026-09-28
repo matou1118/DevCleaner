@@ -930,6 +930,30 @@ def t_ci_yaml_valid():
         assert "steps" in job and job["steps"], f"job {name} 没有 steps"
 
 
+def t_cli_version_reachable():
+    """--version 的信息必须能从 stderr 拿到。
+
+    打包成 console=False 的 GUI exe 后没有可靠 stdout，print() 会失败或被
+    丢弃。CI 上就踩过：exe 起来但 --version 输出为空，冒烟步骤直接判失败。
+    """
+    import re as _re
+    for argv, pat in ((["--version"], r"\d+\.\d+\.\d+"), (["-V"], r"\d+\.\d+\.\d+")):
+        r = subprocess.run([sys.executable, "gui.py"] + argv,
+                           capture_output=True, text=True,
+                           errors="replace", timeout=120)
+        assert r.returncode == 0, f"gui.py {argv} 退出码 {r.returncode}: {r.stderr[-200:]}"
+        blob = (r.stdout or "") + (r.stderr or "")
+        assert _re.search(pat, blob), \
+            f"gui.py {argv} 没输出版本号。stdout={r.stdout!r} stderr={r.stderr!r}"
+        assert app.__version__ in blob, blob[:200]
+    # --help 同理
+    r = subprocess.run([sys.executable, "gui.py", "--help"],
+                       capture_output=True, text=True, errors="replace", timeout=120)
+    assert r.returncode == 0, f"--help 退出码 {r.returncode}"
+    blob = (r.stdout or "") + (r.stderr or "")
+    assert "settings.yaml" in blob, blob[:200]
+
+
 # ---------------- 双语文档 ----------------
 def t_docs_bilingual():
     """面向人的文档必须有英文版。
@@ -1093,6 +1117,7 @@ if __name__ == "__main__":
         check("自检不留垃圾目录", t_no_test_crash_left_behind)
         check("文档双语齐全", t_docs_bilingual)
         check("CI/Issue 模板 YAML 合法", t_ci_yaml_valid)
+        check("CLI 版本信息可获取", t_cli_version_reachable)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
