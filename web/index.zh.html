@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DevCleaner — 找出真正能安全删掉的东西</title>
+<meta name="description" content="Windows 本地独立清理工具。10 类判据驱动的扫描器，文件进回收站，注册表先备份再删，每一条都写明理由。开源。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1117'/%3E%3Cpath d='M9 11h14M9 16h14M9 21h9' stroke='%237aa2f7' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0a0c12; --bg2:#0f1117; --panel:rgba(255,255,255,.035); --panel-b:rgba(255,255,255,.08);
+  --fg:#e6e9f0; --fg2:#aab3c5; --fg3:#828c9f;
+  --accent:#7aa2f7; --accent2:#bb9af7; --safe:#9ece6a; --caution:#e0af68; --rose:#f7768e;
+  --radius:18px; --max:1160px;
+  --ff:"Inter","Segoe UI",system-ui,-apple-system,"Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+  --fm:"JetBrains Mono",Consolas,"SF Mono","Microsoft YaHei",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--ff);color:var(--fg);background:var(--bg);line-height:1.75;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+.aurora{position:fixed;inset:0;z-index:-2;overflow:hidden;background:
+  radial-gradient(1200px 600px at 15% -10%,rgba(122,162,247,.20),transparent 60%),
+  radial-gradient(900px 500px at 90% 10%,rgba(187,154,247,.16),transparent 60%),
+  radial-gradient(1000px 700px at 50% 110%,rgba(158,206,106,.10),transparent 60%),
+  var(--bg);}
+.aurora::after{content:"";position:absolute;inset:-40%;background:
+  conic-gradient(from 0deg,transparent,rgba(122,162,247,.10),transparent 30%);
+  animation:spin 40s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.grid{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 100% 70% at 50% 0%,#000 40%,transparent 75%)}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+a{color:var(--accent);text-decoration:none}
+code,.mono{font-family:var(--fm);font-size:.92em}
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
+  background:rgba(10,12,18,.72);border-bottom:1px solid rgba(255,255,255,.07)}
+nav{display:flex;align-items:center;gap:20px;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.05rem;color:var(--fg)}
+.logo .dot{width:11px;height:11px;border-radius:50%;background:var(--safe);
+  box-shadow:0 0 12px var(--safe);animation:pulse 2.4s infinite}
+@keyframes pulse{50%{opacity:.45;box-shadow:0 0 4px var(--safe)}}
+nav .links{margin-left:auto;display:flex;gap:24px;align-items:center}
+nav .links>a{color:var(--fg2);font-size:.92rem;font-weight:500}
+nav .links>a:hover{color:var(--fg)}
+.lang{display:flex;background:var(--panel);border:1px solid var(--panel-b);border-radius:9px;overflow:hidden}
+.lang a{padding:6px 12px;font-size:.82rem;font-weight:700;color:var(--fg3)}
+.lang a.on{background:linear-gradient(135deg,#7aa2f7,#bb9af7);color:#08090d}
+.gh-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;
+  background:rgba(255,255,255,.06);border:1px solid var(--panel-b);color:var(--fg);
+  font-weight:700;font-size:.9rem}
+.gh-btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+.gh-btn svg{width:17px;height:17px;fill:currentColor}
+.burger{display:none;background:none;border:0;color:var(--fg);font-size:1.6rem;cursor:pointer}
+.hero{padding:96px 0 72px;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:9px;padding:7px 16px;border-radius:999px;
+  background:var(--panel);border:1px solid var(--panel-b);font-size:.83rem;color:var(--fg2);
+  margin-bottom:26px;backdrop-filter:blur(8px)}
+.badge .tag{background:var(--safe);color:#0a0c12;padding:2px 9px;border-radius:999px;
+  font-size:.72rem;font-weight:800}
+h1{font-size:clamp(2.1rem,6vw,4rem);line-height:1.2;letter-spacing:-.01em;font-weight:800;margin-bottom:22px}
+h1 .grad{background:linear-gradient(120deg,var(--accent),var(--accent2) 55%,var(--safe));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lede{font-size:clamp(1rem,2.2vw,1.2rem);color:var(--fg2);max-width:680px;margin:0 auto 34px}
+.cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:18px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 26px;border-radius:12px;
+  font-weight:700;font-size:.98rem;transition:.2s;border:1px solid transparent}
+.btn-primary{background:linear-gradient(135deg,#7aa2f7,#bb9af7);color:#08090d;
+  box-shadow:0 10px 30px rgba(122,162,247,.32)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(122,162,247,.45)}
+.btn-ghost{background:var(--panel);border-color:var(--panel-b);color:var(--fg);backdrop-filter:blur(8px)}
+.btn-ghost:hover{border-color:var(--accent);transform:translateY(-2px)}
+.meta{color:var(--fg3);font-size:.85rem}
+.meta b{color:var(--fg2);font-weight:600}
+.shot{margin:20px auto 0;max-width:980px;border-radius:var(--radius);overflow:hidden;
+  border:1px solid var(--panel-b);background:var(--bg2);
+  box-shadow:0 40px 90px rgba(0,0,0,.6);transform:perspective(1600px) rotateX(6deg);transform-origin:top}
+.shot img{width:100%;display:block}
+.shot .bar{display:flex;gap:7px;padding:11px 14px;border-bottom:1px solid var(--panel-b);background:rgba(255,255,255,.02)}
+.shot .bar i{width:11px;height:11px;border-radius:50%;background:#3a4050}
+.shot .bar i:nth-child(1){background:#f7768e}.shot .bar i:nth-child(2){background:#e0af68}
+.shot .bar i:nth-child(3){background:#9ece6a}
+.shot .cap{font-size:.78rem;color:var(--fg3);text-align:center;padding:11px;background:rgba(255,255,255,.015)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:64px}
+.stat{background:var(--panel);border:1px solid var(--panel-b);border-radius:14px;
+  padding:22px;text-align:center;backdrop-filter:blur(8px)}
+.stat .n{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;
+  background:linear-gradient(120deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat .l{font-size:.82rem;color:var(--fg3);margin-top:4px}
+section{padding:78px 0}
+.sec-head{text-align:center;margin-bottom:48px}
+.eyebrow{color:var(--accent);font-size:.8rem;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;margin-bottom:12px}
+h2{font-size:clamp(1.6rem,4vw,2.4rem);font-weight:800;line-height:1.35;margin-bottom:14px}
+.sec-head p{color:var(--fg2);max-width:640px;margin:0 auto}
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;align-items:stretch}
+.card{background:var(--panel);border:1px solid var(--panel-b);border-radius:var(--radius);
+  padding:28px;backdrop-filter:blur(10px);transition:.25s;position:relative;overflow:hidden;
+  display:flex;flex-direction:column}
+.card::before{content:"";position:absolute;inset:0;opacity:0;transition:.25s;
+  background:linear-gradient(135deg,rgba(122,162,247,.09),transparent 55%)}
+.card:hover{transform:translateY(-4px);border-color:rgba(122,162,247,.4)}
+.card:hover::before{opacity:1}
+.card .ico{font-size:1.7rem;margin-bottom:14px}
+.card h3{font-size:1.06rem;font-weight:700;margin-bottom:9px}
+.card p{color:var(--fg2);font-size:.92rem;margin-bottom:0}
+.cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.cat{display:flex;gap:15px;align-items:flex-start;background:var(--panel);
+  border:1px solid var(--panel-b);border-radius:14px;padding:20px;backdrop-filter:blur(8px);transition:.2s}
+.cat:hover{border-color:rgba(122,162,247,.35);transform:translateX(3px)}
+.cat .em{font-size:1.5rem;flex-shrink:0}
+.cat .t{font-weight:700;margin-bottom:3px}
+.cat .d{color:var(--fg2);font-size:.85rem;line-height:1.65}
+.safe-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+.safe-list{background:var(--panel);border:1px solid var(--panel-b);border-radius:var(--radius);
+  padding:30px;backdrop-filter:blur(10px);margin:0;padding-left:30px}
+.safe-list li{list-style:none;display:flex;gap:13px;padding:11px 0;
+  border-bottom:1px solid rgba(255,255,255,.05)}
+.safe-list li:last-child{border:0}
+.safe-list .ck{color:var(--safe);font-weight:800;flex-shrink:0}
+.safe-list .no{color:var(--rose);font-weight:800;flex-shrink:0}
+.safe-list b{display:block;margin-bottom:2px}
+.safe-list span{color:var(--fg2);font-size:.87rem}
+.code{background:var(--bg2);border:1px solid var(--panel-b);border-radius:14px;padding:18px;
+  font-family:var(--fm);font-size:.83rem;color:var(--fg2);overflow-x:auto;line-height:1.9}
+.code .cm{color:var(--fg3)}
+.code .kw{color:var(--accent2)}
+.code .st{color:var(--safe)}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.sw{border-radius:12px;padding:18px;border:1px solid var(--panel-b);text-align:center}
+.sw b{display:block;font-size:.9rem;margin-bottom:3px}
+.sw span{font-size:.74rem;opacity:.75}
+.band{text-align:center;background:linear-gradient(135deg,rgba(122,162,247,.13),rgba(187,154,247,.1));
+  border:1px solid rgba(122,162,247,.3);border-radius:24px;padding:52px 28px;margin:20px 0 10px}
+footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px;
+  color:var(--fg3);font-size:.87rem}
+.foot{display:flex;gap:22px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.foot nav{display:flex;gap:20px;height:auto}
+.foot a{color:var(--fg3)}.foot a:hover{color:var(--fg)}
+.rv{opacity:1}
+.js .rv{opacity:0;transform:translateY(26px);transition:.7s cubic-bezier(.2,.7,.3,1)}
+.js .rv.in{opacity:1;transform:none}
+@media(max-width:860px){
+  nav .links{position:fixed;inset:64px 0 auto;background:rgba(10,12,18,.97);flex-direction:column;
+    padding:26px;gap:20px;border-bottom:1px solid var(--panel-b);display:none}
+  nav .links.open{display:flex}
+  .burger{display:block;margin-left:auto}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .safe-grid{grid-template-columns:1fr}
+  .hero{padding:64px 0 56px}
+}
+@media(max-width:520px){.stats{grid-template-columns:1fr}.foot{flex-direction:column;text-align:center}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="aurora"></div><div class="grid"></div>
+
+<header>
+  <div class="wrap"><nav>
+    <div class="logo"><span class="dot"></span>DevCleaner</div>
+    <button class="burger" id="burger" aria-label="菜单">☰</button>
+    <div class="links" id="links">
+      <a href="#features">特点</a>
+      <a href="#scanners">扫描器</a>
+      <a href="#safety">安全性</a>
+      <div class="lang"><a href="index.zh.html" class="on">中文</a><a href="index.html">EN</a></div>
+      <a href="https://github.com/matou1118/DevCleaner" class="gh-btn" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub</a>
+    </div>
+  </nav></div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="badge rv"><span class="tag">v0.1.0</span> 开源 · MIT · Windows</div>
+    <h1 class="rv">找出真正能<br><span class="grad">安全删掉的东西</span></h1>
+    <p class="lede rv">一个会把自己的判据摊开给你看的清理工具。十类判据驱动的扫描器，
+      文件进回收站，注册表删前先备份 —— 每一条旁边都写清楚为什么。</p>
+    <div class="cta rv">
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">⬇ 下载 v0.1.0</a>
+      <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">
+        <svg viewBox="0 0 16 16" style="width:17px;fill:currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        去 GitHub 点个星</a>
+    </div>
+    <p class="meta rv">单个 <b>34 MB</b> exe · 不需要 Python / Node / Java / 浏览器 · <b>43</b> 项自检</p>
+
+    <div class="shot rv">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img src="../docs/01-overview.png" alt="DevCleaner 一屏显示十个分类，可回收 2.02 GB" loading="eager" width="1180" height="900">
+      <div class="cap">十个分类一屏放得下 —— 全折叠，不藏东西。真实运行，真实数字。</div>
+    </div>
+
+    <div class="stats rv">
+      <div class="stat"><div class="n" data-stat="total">—</div><div class="l">本机实测可回收</div></div>
+      <div class="stat"><div class="n" data-stat="scanners">10</div><div class="l">类判据驱动的扫描器</div></div>
+      <div class="stat"><div class="n">6</div><div class="l">套配色主题，实时切换</div></div>
+      <div class="stat"><div class="n" data-stat="tests">44</div><div class="l">项自检，CI 覆盖 3.10–3.13</div></div>
+    </div>
+  </div>
+</div>
+
+<section id="features"><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">不一样在哪</div>
+    <h2>多数清理工具在猜<br>这个把判据摊开给你看</h2>
+    <p>每一条都带着触发它的那个信号 —— 进程名、卸载项、远程地址。证不了一个文件是死的，它就不动。</p>
+  </div>
+  <div class="feat">
+    <div class="card rv"><div class="ico">🔍</div><h3>三角验证，不是猜</h3>
+      <p>安装包只有在「产品名对得上」<em>并且</em>进程、安装目录、卸载注册表三者之一确认已安装时才进列表。单一信号不算数。</p></div>
+    <div class="card rv"><div class="ico">♻️</div><h3>文件进回收站</h3>
+      <p>删除走 <code>SHFileOperation</code> + <code>FOF_ALLOWUNDO</code>。周二手滑，周三还在回收站里。</p></div>
+    <div class="card rv"><div class="ico">🛡️</div><h3>注册表先备份</h3>
+      <p>注册表键<em>先</em>导出成 <code>.reg</code> 再删。导出失败就拒绝删除 —— 绝不悄悄改你的注册表。</p></div>
+    <div class="card rv"><div class="ico">🔒</div><h3>你的仓库动不了</h3>
+      <p>带 <code>remote</code> 的 Git 仓库永远不进可删列表。只有没有远程地址的本地 clone 才会被考虑。</p></div>
+    <div class="card rv"><div class="ico">⏱️</div><h3>尊重时间与占用</h3>
+      <p>过期临时文件要先满足最小天数。被运行中的进程占着的，会跳过并报告，不会硬来。</p></div>
+    <div class="card rv"><div class="ico">🌐</div><h3>中英双语 · 六套主题</h3>
+      <p>右上角切换中英文。配色对比度按 WCAG AA 校验过。全程离线，一个网络请求都不发。</p></div>
+  </div>
+</div></section>
+
+<section id="scanners"><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">十个扫描器</div>
+    <h2>它到底在找什么</h2>
+    <p>字节没意义的按条目数显示 —— 注册表和空文件这两类显示条目数量，不拿假 gigabyte 糊弄你。</p>
+  </div>
+  <div class="cats rv" id="cats"><!-- 由 web/gen_stats.py 扫真实数据后填充 --></div>
+</div></section>
+
+<section id="safety"><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">安全性</div>
+    <h2>它拒绝做的事</h2>
+    <p>清理工具只有在你的机器上值得信任时才有用。</p>
+  </div>
+  <div class="safe-grid">
+    <ul class="safe-list rv">
+      <li><span class="ck">✓</span><div><b>注册表绝不盲删</b>
+        <span>先导出 <code>.reg</code>，导出失败就拒绝删除。还原执行 <code>reg import</code>。</span></div></li>
+      <li><span class="ck">✓</span><div><b>文件可还原</b>
+        <span>全程走回收站 —— 不会在你背后硬删。</span></div></li>
+      <li><span class="ck">✓</span><div><b>被占用的跳过</b>
+        <span>运行中进程占着的文件会被报告，而不是硬来。</span></div></li>
+      <li><span class="no">✕</span><div><b>不扫系统目录</b>
+        <span>永不扫描 <code>C:\Windows</code>、<code>Program Files</code> 和系统临时目录。</span></div></li>
+      <li><span class="no">✕</span><div><b>不碰有 remote 的仓库</b>
+        <span>能 push 到别处的 clone 直接排除在删除之外。</span></div></li>
+      <li><span class="no">✕</span><div><b>不联网、不上报</b>
+        <span>完全离线运行，你机器上的任何信息都不会离开它。</span></div></li>
+    </ul>
+    <div class="rv">
+      <div class="code"><span class="cm"># 删一个注册表项实际发生了什么</span>
+<span class="kw">def</span> apply_registry_item(item):
+    <span class="kw">if</span> not <span class="kw">not</span> backup(item):   <span class="cm"># 先导出</span>
+        <span class="kw">return</span> <span class="kw">False</span>, <span class="st">"备份失败"</span>  <span class="cm"># 拒绝删除</span>
+    <span class="kw">return</span> <span class="kw">True</span>, <span class="st">"已删除 · 备份 "</span> + <span class="st">"\\\\DevCleaner\\backups\\"</span>
+
+<span class="cm"># 而文件永远不会被硬删</span>
+<span class="kw">def</span> to_recycle_bin(path):
+    <span class="kw">return</span> SHFileOperationW(path, FOF_ALLOWUNDO)</div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">外观</div>
+    <h2>六套主题，不用重新打包</h2>
+    <p>右上角切换，选择直接写回 <code>settings.yaml</code>，重启还在。</p>
+  </div>
+  <div class="strip rv">
+    <div class="sw" style="background:#1a1b26;color:#c0caf5"><b>Tokyo Night</b><span>默认</span></div>
+    <div class="sw" style="background:#232136;color:#e0def4"><b>Rosé Pine</b><span>柔和对比</span></div>
+    <div class="sw" style="background:#0f1117;color:#e6e9f0"><b>Ink</b><span>近黑</span></div>
+    <div class="sw" style="background:#ffffff;color:#1a1a1a"><b>Paper</b><span>浅色</span></div>
+    <div class="sw" style="background:#faf8f3;color:#2b2b2b"><b>Studio Light</b><span>暖白</span></div>
+    <div class="sw" style="background:#2b2b31;color:#e8e8ea"><b>Studio Dark</b><span>中性</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="band rv">
+    <h2 style="margin-bottom:12px">在你在乎的机器上试一下</h2>
+    <p style="color:var(--fg2);max-width:540px;margin:0 auto 28px">
+      单个 exe，不装环境，不装依赖。先读它给出的理由，再决定删不删。</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">⬇ 下载 v0.1.0</a>
+      <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">看看源码</a>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap foot">
+  <div>DevCleaner v0.1.0 · MIT · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
+  <nav style="display:flex;gap:20px">
+    <a href="https://github.com/matou1118/DevCleaner">源码</a>
+    <a href="https://github.com/matou1118/DevCleaner/releases">版本发布</a>
+    <a href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">v0.1.0</a>
+    <a href="https://github.com/matou1118/DevCleaner/issues">问题反馈</a>
+    <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">许可证</a>
+  </nav>
+</div></footer>
+
+<script>
+const b=document.getElementById('burger'),l=document.getElementById('links');
+b.onclick=()=>l.classList.toggle('open');
+l.querySelectorAll('a').forEach(a=>a.onclick=()=>l.classList.remove('open'));
+document.documentElement.classList.add('js');
+const io=new IntersectionObserver(es=>es.forEach(e=>{
+  if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}
+}),{threshold:.12});
+document.querySelectorAll('.rv').forEach((e,i)=>{e.style.transitionDelay=(i%4)*60+'ms';io.observe(e)});
+setTimeout(()=>document.querySelectorAll('.rv:not(.in)').forEach(e=>e.classList.add('in')),1200);
+
+/* 统计数字和分类实测值来自 web/stats.json（由 web/gen_stats.py 跑真实扫描生成）。
+   写死在 HTML 里的话，机器上多删一个缓存，页面就和实际对不上了。 */
+const DESC={
+ "已安装软件的安装包":"已装软件的安装文件，靠运行进程 + 安装目录 + 卸载项三重确认。",
+ "传统垃圾文件":"缩略图、跳转列表、浏览器缓存、着色器缓存、崩溃转储、Windows 更新缓存。",
+ "过期临时文件":"超过 N 天没动过。目录里有 exe 在跑会标为「需确认」。",
+ "GitHub 残留":"gh CLI、GitHub Desktop、Copilot 的缓存，以及没有远程地址的本地 clone。",
+ "AI Agent / Skill 缓存":"不在你 <code>plugin</code> 列表里的包，以及 <code>X</code> 与 <code>X@latest</code> 并存时的旧版本。",
+ "更新器残留":"<code>*@*-updater\\pending\\*</code> 和 <code>*\\updates\\executors\\*</code>。",
+ "构建产物 / 开发垃圾":"和 <code>.spec</code> 同级的 <code>build/</code>，以及 <code>__pycache__</code>、<code>.pytest_cache</code> 之类。",
+ "Python 环境与缓存":"虚拟环境（有真实 <code>pyvenv.cfg</code> 才算）、pip 缓存，以及你在配置里追加的任何目录。",
+ "空文件 / 空目录 / 断链":"0 字节残留，自动跳过 <code>.gitkeep</code>、<code>*.lock</code>、<code>desktop.ini</code>、<code>Thumbs.db</code>。",
+ "未分类":"没归到上面任何一类的东西。"
+};
+fetch('stats.json').then(r=>r.json()).then(s=>{
+  document.querySelectorAll('[data-stat="total"]').forEach(e=>e.textContent=s.total_human);
+  document.querySelectorAll('[data-stat="scanners"]').forEach(e=>e.textContent=s.scanners);
+  const box=document.getElementById('cats');
+  if(!box||!s.categories)return;
+  box.innerHTML=s.categories.map(c=>{
+    const d=DESC[c.zh]||'';
+    const n=c.count_extra?` · 另 ${c.count_extra} 项按条目计`:'';
+    return `<div class="cat"><span class="em">${c.icon}</span><div>
+      <div class="t">${c.zh}</div>
+      <div class="d">${d} 实测 <b>${c.size_human}</b>（${c.count} 项${n}）。</div></div></div>`;
+  }).join('');
+}).catch(()=>{});
+</script>
+</body>
+</html>

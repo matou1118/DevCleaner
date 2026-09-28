@@ -345,12 +345,13 @@ class ScanThread(QThread):
     done = Signal()
 
     def run(self) -> None:
-        # 扫描线程几乎全程持 GIL 做 os.scandir/stat。默认 5ms 的切换间隔会让
-        # 主线程和它互相抢，界面卡成幻灯片。放大到 25ms 后主线程能稳定拿到
-        # 时间片，进度条和展开/折叠都不卡。
+        # 扫描线程几乎全程持 GIL 做 os.scandir/stat。sys.setswitchinterval 就是
+        # 主线程的最坏等待时间：之前设的 25ms 意味着 UI 每 40ms 才有机会画一次，
+        # 配合「一次重绘=全窗重绘」就是肉眼可见的闪。压回 5ms（默认）让主线程
+        # 随时能插进来 —— 扫描慢一点无所谓，界面不能闪。
         old = sys.getswitchinterval()
         try:
-            sys.setswitchinterval(0.025)
+            sys.setswitchinterval(0.005)
             engine.run_scan(on_progress=lambda s, p: self.progressed.emit(s, p))
         finally:
             sys.setswitchinterval(old)
@@ -373,6 +374,7 @@ class MainWindow(QMainWindow):
         self.theme = engine.DEFAULT_THEME
         self._remember = True     # 构造期套用默认主题时不回写配置
         self._last_stage = 0.0    # 阶段文字节流用，避免扫描期密集重绘
+        self._last_stage_text = ""
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -518,12 +520,13 @@ class MainWindow(QMainWindow):
         self.btn_scan.setEnabled(False)
         self.btn_scan.setText(T("扫描中…"))
         self.btn_expand.setEnabled(False)
-        # 扫描期改成不确定进度条（走马灯），并节流阶段文字。
-        # 原因：扫描线程全程做 os.scandir/stat，信号一密集就会让主线程反复
-        # 重绘整窗（本窗口有 160+ 个带样式的子控件，一次重绘就是全窗），
-        # 表现出来就是「全屏闪动」。走马灯 + 250ms 节流把重绘压到最低。
-        self.prog.setRange(0, 0)
+        # 走马灯（setRange(0,0)）会自己连续重绘，而本窗口任意一次重绘都是全窗
+        # （160+ 个带样式的子控件，样式表让它们互相牵连）—— 那是扫描期满屏闪的
+        # 来源。改成用 run_scan 给的真实百分比：整数没变就不重绘。
+        self.prog.setRange(0, 100)
+        self.prog.setValue(0)
         self._last_stage = 0.0
+        self._last_stage_text = ""
         self.stage.setText(T("准备中"))
         self.log.clear()
         self.thread = ScanThread()
@@ -532,11 +535,20 @@ class MainWindow(QMainWindow):
         self.thread.start()
 
     def _on_progress(self, stage: str, p: float) -> None:
+        # 百分比随手就更新（setValue 内部只在整数变化时重绘，很便宜）。
+        # 阶段文字既节流又去重：setText 即便内容相同也会触发一次重绘，
+        # 之前只做了节流，扫描里大量重复的阶段名照样在刷全窗。
+        try:
+            self.prog.setValue(int(max(0.0, min(1.0, float(p))) * 100))
+        except (TypeError, ValueError):
+            pass
+        txt = T(stage)
         now = time.monotonic()
-        if now - self._last_stage < 0.25:
+        if txt == self._last_stage_text or now - self._last_stage < 0.25:
             return
+        self._last_stage_text = txt
         self._last_stage = now
-        self.stage.setText(T(stage))
+        self.stage.setText(txt)
 
     def _on_done(self) -> None:
         self.btn_scan.setEnabled(True)

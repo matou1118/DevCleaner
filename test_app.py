@@ -1059,6 +1059,167 @@ def t_i18n_complete():
     assert lang.set_lang("xx") is None and lang.LANG == "zh"
 
 
+def _lum(hex_color: str) -> float:
+    h = hex_color.lstrip("#")
+    c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def _contrast(a: str, b: str) -> float:
+    hi, lo = sorted((_lum(a), _lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def t_web_site():
+    """静态站：两页都在、链接不失效、正文对比度达 WCAG AA。
+
+    对比度不靠眼睛判断 —— --fg3 之前是 4.17:1，AA 要 4.5:1，肉眼在深色底上
+    根本看不出差多少。表格里所有文字/背景组合都算一遍。
+    """
+    import re as _re
+    web = Path(__file__).parent / "web"
+    assert web.is_dir(), "web/ 目录没了"
+    for name in ("index.html", "index.zh.html", "404.html"):
+        p = web / name
+        assert p.is_file(), f"缺 {name}"
+        html = p.read_text(encoding="utf-8")
+        assert html.lstrip().lower().startswith("<!doctype html>"), f"{name} 没有 doctype"
+        assert "<meta name=\"viewport\"" in html, f"{name} 没有 viewport，移动端会糊"
+        assert "<title>" in html, f"{name} 没有 title"
+        # 标签闭合的粗检：每个开标签有对应闭标签。
+        # 注意要用 <tag> 和 <tag 后跟空白/>，否则 <head 会把 <header 也算进去。
+        for tag in ("html", "head", "body", "style", "script", "div", "header", "footer"):
+            if f"<{tag}>" not in html and f"<{tag} " not in html:
+                continue
+            opened = len(_re.findall(rf"<{tag}(?=[\s>])", html))
+            closed = html.count(f"</{tag}>")
+            assert opened == closed, \
+                f"{name} 的 <{tag}> 开 {opened} 个、闭 {closed} 个，对不上"
+
+    idx = (web / "index.html").read_text(encoding="utf-8")
+    zh = (web / "index.zh.html").read_text(encoding="utf-8")
+
+    # 两版首页必须互链，否则用户切不过去
+    assert "index.zh.html" in idx, "英文版没链到中文版"
+    assert "index.html" in zh, "中文版没链回英文版"
+    # 404 要两种语言都有，且按 navigator.language 切换
+    nf = (web / "404.html").read_text(encoding="utf-8")
+    assert "navigator.language" in nf, "404 没做语言自动检测"
+    for cls in ('class="en"', 'class="zh"'):
+        assert cls in nf, f"404 缺 {cls} 那一套文案"
+
+    # 仓库链接必须在，且必须都指向 matou1118/DevCleaner（防止写错成别人仓库）。
+    # 用子串包含而不是集合相等：/releases/tag/v0.1.0 也算命中 /releases。
+    blob = " ".join(_re.findall(r"https://github\.com/([\w.\-/]+)", idx))
+    for want in ("matou1118/DevCleaner",
+                 "matou1118/DevCleaner/releases",
+                 "matou1118/DevCleaner/releases/tag/v0.1.0",
+                 "matou1118/DevCleaner/issues"):
+        assert want in blob, f"英文首页少了链接: {want}"
+    others = [u for u in _re.findall(r"https://github\.com/([\w.\-]+)/", idx)
+              if u != "matou1118"]
+    assert not others, f"链接指向了别人的仓库: {set(others)}"
+
+    # 引用的本地资源必须真的存在
+    for page_name, page in (("index.html", idx), ("index.zh.html", zh)):
+        for m in _re.findall(r'(?:src|href)="([^"]+)"', page) + \
+                 _re.findall(r"fetch\('([^']+)'\)", page):
+            if m.startswith(("http", "#", "data:", "/")):
+                continue
+            assert (web / m).resolve().exists(), \
+                f"{page_name} 引用了不存在的文件: {m}"
+
+    # 对比度：把 CSS 变量解析出来，逐对算（中英文两版都要）
+    for label, page in (("en", idx), ("zh", zh)):
+        css = _re.search(r":root\{(.*?)\}", page, _re.S).group(1)
+        var = dict(_re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", css))
+        for need in ("--bg", "--fg", "--fg2", "--fg3", "--accent", "--accent2", "--safe"):
+            assert need in var, f"{label} 版少了 CSS 变量 {need}"
+        bg = var["--bg"]
+        for fg, what in (("--fg", "正文"), ("--fg2", "次要文字"), ("--fg3", "弱化文字"),
+                         ("--accent", "强调链接"), ("--safe", "安全绿")):
+            ratio = _contrast(var[fg], bg)
+            assert ratio >= 4.5, \
+                f"{label} 版{what} ({fg}={var[fg]} on {bg}) 只有 {ratio:.2f}:1，AA 要 4.5:1"
+
+    # 关键卖点必须在两版上都在，不能被改没了
+    for phrase in ("Recycle Bin", "MIT"):
+        assert phrase in idx, f"英文首页少了关键信息: {phrase}"
+    for phrase in ("回收站", "MIT"):
+        assert phrase in zh, f"中文首页少了关键信息: {phrase}"
+
+    # 数字不许写死在 HTML 里：必须来自 stats.json（跑真实扫描生成）。
+    # 写死的话机器上多删一个缓存，页面就开始说谎。
+    for page_name, page in (("index.html", idx), ("index.zh.html", zh)):
+        assert 'data-stat="total"' in page, \
+            f"{page_name} 的合计数字写死了，应改用 data-stat + stats.json"
+        assert "fetch('stats.json')" in page, f"{page_name} 没读 stats.json"
+        assert 'id="cats"' in page, f"{page_name} 的分类列表没留给 stats.json 渲染"
+        assert not _re.search(r'class="n">\s*[\d.]+\s*(GB|MB|KB)', page), \
+            f"{page_name} 里还有写死的容量数字"
+
+    # stats.json 本身要合法，且和当前扫描对得上
+    import json as _json
+    sp = web / "stats.json"
+    assert sp.is_file(), "缺 stats.json，跑 python web/gen_stats.py 生成"
+    s = _json.loads(sp.read_text(encoding="utf-8"))
+    for need in ("total_human", "scanners", "categories"):
+        assert need in s, f"stats.json 缺 {need}"
+    assert s["scanners"] == len(app.SCANNERS), \
+        f"stats.json 写的是 {s['scanners']} 个扫描器，实际 {len(app.SCANNERS)} 个"
+    for c in s["categories"]:
+        for need in ("icon", "zh", "en", "size_human"):
+            assert need in c and c[need] != "", f"stats.json 的分类缺 {need}: {c}"
+
+
+def t_no_marquee_ghosting():
+    """扫描期不能有走马灯进度条，也不能重复 setText 同一句阶段文字。
+
+    这窗口的样式表让 160+ 个子控件互相牵连，任意一次重绘都是全窗重绘。
+    走马灯（setRange(0,0)）自己就连续重绘，等于 30 次/秒全窗刷新 —— 表现就是
+    扫描到 90% 时满屏闪、像有弹窗拖影。setText 即便内容相同也会触发重绘，
+    所以光节流不够，还得去重。
+    """
+    import gui
+    from PySide6.QtWidgets import QApplication
+    import time
+    qa = QApplication.instance() or QApplication([])
+    w = gui.MainWindow()
+    w.show()
+
+    w.start_scan()
+    # 进度条必须是确定值范围，不能是走马灯
+    assert w.prog.maximum() == 100, \
+        f"扫描期进度条 maximum={w.prog.maximum()}，0 就是走马灯，会全屏闪"
+    assert w.prog.minimum() == 0
+
+    # 连续喂同一个阶段名，文字标签不该被反复重设
+    label = w.stage
+    calls = {"n": 0}
+    orig = label.setText
+
+    def counting(v):
+        calls["n"] += 1
+        return orig(v)
+
+    label.setText = counting
+    w._last_stage_text = "SENTINEL"
+    w._last_stage = time.monotonic()
+    for _ in range(50):
+        w._on_progress("SENTINEL", 0.5)
+    label.setText = orig
+    assert calls["n"] == 0, f"同一句阶段文字被 setText 了 {calls['n']} 次，每次都是全窗重绘"
+
+    # 换新文字时仍要能更新
+    w._last_stage = 0.0
+    w._on_progress("别的阶段", 0.9)
+    assert label.text() == "别的阶段", label.text()
+
+    w.thread and w.thread.wait(300000)
+    w.close()
+
+
 # ---------------- 双语文档 ----------------
 def t_docs_bilingual():
     """面向人的文档必须有英文版。
@@ -1225,6 +1386,8 @@ if __name__ == "__main__":
         check("CLI 版本信息可获取", t_cli_version_reachable)
         check("dist 打包产物完整", t_dist_bundle_sane)
         check("界面文案英译无遗漏", t_i18n_complete)
+        check("静态站页面与对比度", t_web_site)
+        check("扫描期无走马灯/无重复重绘", t_no_marquee_ghosting)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
