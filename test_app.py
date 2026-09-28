@@ -954,6 +954,28 @@ def t_cli_version_reachable():
     assert "settings.yaml" in blob, blob[:200]
 
 
+def t_dist_bundle_sane():
+    """dist/ 里若存在 settings.yaml，必须是完整配置而不是 0 字节空壳。
+
+    build.bat 里 copy 是静默的，失败过一次没人发现：exe 能跑，但用户的
+    扫描根目录和主题全丢了。app.py 里 `or {}` 会兜住空文件所以不报错 ——
+    静默丢配置比崩掉更难查。
+    """
+    import yaml as _y
+    d = Path(__file__).parent / "dist"
+    if not d.is_dir():
+        return  # 还没 build 过，跳过
+    st = d / "settings.yaml"
+    assert st.is_file(), "dist/settings.yaml 缺失，exe 会用默认配置启动"
+    size = st.stat().st_size
+    assert size > 100, f"dist/settings.yaml 只有 {size} 字节，是空壳"
+    data = _y.safe_load(st.read_text(encoding="utf-8"))
+    assert isinstance(data, dict) and data, "dist/settings.yaml 解析不出配置"
+    root = Path(__file__).parent / "settings.yaml"
+    for key in ("scan_options",):
+        assert key in data, f"dist 缺 {key}"
+
+
 # ---------------- 双语文档 ----------------
 def t_docs_bilingual():
     """面向人的文档必须有英文版。
@@ -1118,6 +1140,7 @@ if __name__ == "__main__":
         check("文档双语齐全", t_docs_bilingual)
         check("CI/Issue 模板 YAML 合法", t_ci_yaml_valid)
         check("CLI 版本信息可获取", t_cli_version_reachable)
+        check("dist 打包产物完整", t_dist_bundle_sane)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

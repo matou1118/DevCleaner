@@ -17,11 +17,21 @@ echo [3/3] packaging (PyInstaller onefile)...
 python -m PyInstaller --noconfirm DevCleaner.spec
 if errorlevel 1 goto :failed
 
-copy /y settings.yaml dist\settings.yaml >nul
+rem copy is silent by default, so a failed copy used to leave a 0-byte
+rem settings.yaml behind and the user silently lost their scan roots + theme.
+copy /y settings.yaml dist\settings.yaml >nul || goto :copymissing
+if not exist dist\settings.yaml goto :copymissing
+for %%A in (dist\settings.yaml) do if %%~zA LSS 100 goto :copymissing
 echo.
 echo DONE: dist\DevCleaner.exe
 echo Edit dist\settings.yaml to configure; no rebuild needed.
 goto :end
+
+:copymissing
+echo.
+echo FAILED: could not copy settings.yaml into dist\ - the exe would start
+echo with an empty config and lose your scan roots and theme.
+goto :failed
 
 :failed
 echo.
