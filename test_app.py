@@ -895,6 +895,41 @@ def t_repo_links_consistent():
     assert not bad_img, "图片引用失效:\n  " + "\n  ".join(bad_img)
 
 
+def t_ci_yaml_valid():
+    """workflow / issue 模板的 YAML 必须能解析。
+
+    `name: Smoke: JSON output` 这种带冒号的值会让 YAML 报
+    "mapping values are not allowed here"，CI 直接 0 秒失败 —— 连 runner
+    都起不来，日志里什么线索都没有。
+    """
+    import yaml
+    root = Path(__file__).parent
+    pats = [".github/workflows/*.yml", ".github/workflows/*.yaml",
+            ".github/ISSUE_TEMPLATE/*.yml"]
+    files = [p for pat in pats for p in root.glob(pat)]
+    assert files, "没找到任何 CI / Issue 模板 YAML"
+    for p in files:
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            rel = p.relative_to(root).as_posix()
+            raise AssertionError(f"{rel} YAML 解析失败: {e}") from None
+        assert isinstance(data, dict), f"{p.name} 顶层不是映射"
+    # 模板必须有 name / description，否则 GitHub 页面显示不出来
+    for p in root.glob(".github/ISSUE_TEMPLATE/*.yml"):
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        if p.name == "CONTRIBUTING_HINT.md":
+            continue
+        assert "name" in data, f"{p.name} 缺 name"
+        assert "description" in data, f"{p.name} 缺 description"
+    # workflow 必须有 test job
+    wf = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    assert "jobs" in wf and "test" in wf["jobs"], "ci.yml 缺 test job"
+    for name, job in wf["jobs"].items():
+        assert "runs-on" in job, f"job {name} 缺 runs-on"
+        assert "steps" in job and job["steps"], f"job {name} 没有 steps"
+
+
 # ---------------- 双语文档 ----------------
 def t_docs_bilingual():
     """面向人的文档必须有英文版。
@@ -1057,6 +1092,7 @@ if __name__ == "__main__":
         check("非 UTF-8 控制台不崩", t_console_encoding_safe)
         check("自检不留垃圾目录", t_no_test_crash_left_behind)
         check("文档双语齐全", t_docs_bilingual)
+        check("CI/Issue 模板 YAML 合法", t_ci_yaml_valid)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -47,7 +47,7 @@ jobs:
 
       # Console output is forced to UTF-8 inside app.py / test_app.py. PowerShell needs
       # its own opt-in because ConvertFrom-Json reads text too.
-      - name: Smoke: JSON output
+      - name: "Smoke: JSON output"
         shell: pwsh
         run: |
           python app.py --json -c "构建产物" --min-age 1 > smoke.json
@@ -78,7 +78,7 @@ jobs:
           Copy-Item settings.yaml dist\settings.yaml
           Write-Host "built $([math]::Round((Get-Item dist\DevCleaner.exe).Length/1MB,1)) MB"
 
-      - name: Smoke: the exe starts and reports its version
+      - name: "Smoke: the exe starts and reports its version"
         run: |
           $v = & .\dist\DevCleaner.exe --version
           if (-not $v) { Write-Error "the exe failed to start" }
