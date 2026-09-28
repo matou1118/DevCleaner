@@ -37,17 +37,21 @@ jobs:
       - name: 版本号与更新日志一致
         shell: pwsh
         run: |
+          $OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
           $v = (python -c "import app; print(app.__version__)").Trim()
-          $log = Get-Content CHANGELOG.md -Raw
+          $log = Get-Content CHANGELOG.md -Raw -Encoding utf8
           if ($log -notmatch "## \[$([regex]::Escape($v))\]") {
             Write-Error "CHANGELOG.md 缺少版本 $v 的条目"
           }
           Write-Host "CHANGELOG 已覆盖 v$v"
 
+      # 控制台是 cp1252，编码兜底在 app.py / test_app.py 开头做了。
+      # 这里再兜一层 PowerShell 侧的读取，ConvertFrom-Json 也需要 UTF-8。
       - name: 冒烟：能跑出 JSON
+        shell: pwsh
         run: |
           python app.py --json -c "构建产物" --min-age 1 > smoke.json
-          $j = Get-Content smoke.json -Raw | ConvertFrom-Json
+          $j = Get-Content smoke.json -Raw -Encoding utf8 | ConvertFrom-Json
           if ($null -eq $j.version) { Write-Error "JSON 缺少 version 字段" }
           Write-Host "扫描到 $($j.items.Count) 项"
 

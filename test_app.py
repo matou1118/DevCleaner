@@ -1,9 +1,18 @@
 """DevCleaner 自检 —— python test_app.py 应输出 ALL OK"""
+import os
 import re
 import shutil
 import sys
 import tempfile
 from pathlib import Path
+
+# GitHub runner 的控制台是 cp1252，本机是 GBK —— 两者都编不了中文。
+# 测试名和失败信息里有中文，不兜住就会 UnicodeEncodeError 崩掉整个套件。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 import app
 from app import (InstalledIndex, age_days, dir_size, human, known_folders,
@@ -726,6 +735,36 @@ def t_no_internal_protocol_leak():
         app.BULK.pop("empty", None)
 
 
+def t_console_encoding_safe():
+    """中文测试名/分类名不能在非 UTF-8 控制台上崩。
+
+    GitHub runner 的控制台是 cp1252，中文机器是 GBK，两者都编不了中文。
+    这个 bug 在本机用 PYTHONIOENCODING=utf-8 掩盖着，直到 CI 上整个套件
+    UnicodeEncodeError 崩掉才暴露。
+
+    只验「前几项能否打印」，不能跑全套 —— 本用例在套件里，套件跑全套
+    就会无限递归。
+    """
+    import subprocess
+    probe = subprocess.run(
+        [sys.executable, "-c",
+         "import sys,io;sys.stdout=io.TextIOWrapper(sys.stdout.buffer,"
+         "encoding='cp1252',errors='strict');print('\u4e2d\u6587')"],
+        capture_output=True, text=True, errors="replace", timeout=60)
+    if probe.returncode == 0:
+        return                                  # 这个环境意外能编中文，跳过
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONIOENCODING"}
+    env["PYTHONIOENCODING"] = ""                # 交回 Python 自己去猜
+    r = subprocess.run(
+        [sys.executable, "-c",
+         "import sys;sys.path.insert(0,'.');import test_app as T;"
+         "T.t_human();T.t_candidates();T.t_index()"],
+        capture_output=True, text=True, errors="replace", timeout=120, env=env)
+    out = r.stdout + r.stderr
+    assert "UnicodeEncodeError" not in out, f"非 UTF-8 控制台下崩溃:\n{out[-500:]}"
+    assert r.returncode == 0, f"退出码 {r.returncode}:\n{out[-500:]}"
+
+
 # ---------------- 仓库链接 ----------------
 def t_no_placeholder_left():
     """OWNER / TODO / FIXME / example.com 之类占位符漏一个就是坏链接"""
@@ -900,6 +939,7 @@ if __name__ == "__main__":
         check("仓库链接用户名一致", t_repo_links_consistent)
         check("内部协议串不外泄", t_no_internal_protocol_leak)
         check("说明文件齐全", t_docs_present)
+        check("非 UTF-8 控制台不崩", t_console_encoding_safe)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

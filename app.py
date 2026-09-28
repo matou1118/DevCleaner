@@ -16,6 +16,15 @@ import subprocess
 import sys
 import time
 import winreg
+
+# 控制台编码兜底：GitHub runner 是 cp1252，中文机器是 GBK，都编不了中文。
+# 扫描结果的分类名全是中文，不设这个会 UnicodeEncodeError。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 from ctypes import wintypes
 from dataclasses import dataclass, field
 from datetime import datetime
