@@ -112,6 +112,9 @@ _EN: Dict[str, str] = {
     "注册表": "Registry",
     "可安全重置": "safe to reset",
 
+    # ---- 署名 ----
+    "GitHub": "GitHub",
+
     # ---- 全角标点 ----
     "，": ", ",
     "：": ": ",

@@ -1,6 +1,7 @@
 """DevCleaner 原生界面（PySide6）。扫描逻辑全在 app.py，这里只管显示。"""
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -480,8 +481,15 @@ class MainWindow(QMainWindow):
         fl.setSpacing(10)
         self.foot = _lbl(T("已选 0 项 · 0 B"), "footText")
         fl.addWidget(self.foot)
-        self.ver = _lbl(f"v{engine.__version__}", "catHint")
-        self.ver.setToolTip("DevCleaner · MIT License")
+        # 署名 + 可点的 GitHub 链接。点开用系统默认浏览器，不在应用内导航。
+        self.ver = _lbl(f"{engine.OWNER} {T('GitHub')} v{engine.__version__}", "catHint")
+        self.ver.setToolTip(f"{engine.REPO}  ·  MIT License")
+        self.ver.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ver.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction)
+        self.ver.setOpenExternalLinks(True)
+        self._set_byline(engine.THEMES[self.theme]["accent"]
+                         if self.theme in engine.THEMES else "#7aa2f7")
         fl.addWidget(self.ver)
         fl.addStretch(1)
         b_all = QPushButton(T("全选安全项"))
@@ -530,29 +538,40 @@ class MainWindow(QMainWindow):
         self.prog.setRange(0, 100)
         self.prog.setValue(0)
         self._last_stage_text = ""
+        self._last_stage = 0.0
+        self._last_pct = -1
         self.stage.setText(T("准备中"))
         self.log.clear()
-        # 关掉整个窗口的更新。实测：扫描线程每拿到一个 GIL 时间片就会唤醒主线程
-        # 去 processEvents，单次扫描能引发数百次重绘，MainWindow 也在其中 ——
-        # 那就是「满屏闪 + 像有弹窗拖影」的真正来源。进度条在这里是不重要的，
-        # 关掉更新后 14 秒扫描一帧不闪，结束时统一重绘一次。
-        # 代价：扫描期间看不到进度百分比。值不值得？闪比进度条难受得多。
-        self.setUpdatesEnabled(False)
+        # 不再 setUpdatesEnabled(False)：那会把进度条一起关掉（用户反馈"没有进度条"），
+        # 而 tools/screenprobe.py 的抓屏实测显示窗口像素本来就是稳的 —— 31 秒扫描
+        # 402 帧里只有 8 帧变化，全在进度条那一行（y=117..175，x 从 231 推到 941）。
+        # tools/starve.py ��显示主线程拿到了 100% 时间片、零卡顿。
+        # 所以「全窗口关更新」是砍错地方。真正要省的是重绘次数：进度条限到
+        # 4 次/秒 + 整数变了才重绘，肉眼看着在动，但每秒只有 4 次重绘。
         self.thread = ScanThread()
         self.thread.progressed.connect(self._on_progress)
         self.thread.done.connect(self._on_done)
         self.thread.start()
 
     def _on_progress(self, stage: str, p: float) -> None:
-        # 扫描期窗口更新是关着的（见 start_scan），这里只记账不画 ——
-        # 每画一次就是一次全窗重绘。结束时 _on_done 统一铺一次。
-        self.prog.setValue(int(max(0.0, min(1.0, float(p))) * 100))
-        self._last_stage_text = T(stage)
+        # 进度条：setValue 内部只在整数变化时重绘，很便宜。
+        try:
+            v = int(max(0.0, min(1.0, float(p))) * 100)
+        except (TypeError, ValueError):
+            v = 0
+        if v != self._last_pct:
+            self._last_pct = v
+            self.prog.setValue(v)
+        # 阶段文字：既节流又去重。setText 内容相同也触发重绘，而扫描里大量阶段名
+        # 是重复的（9 个扫描器各自报一次），不去重就是白刷。
+        txt = T(stage)
+        now = time.monotonic()
+        if txt != self._last_stage_text and now - self._last_stage >= 0.25:
+            self._last_stage_text = txt
+            self._last_stage = now
+            self.stage.setText(txt)
 
     def _on_done(self) -> None:
-        # 先恢复更新：setUpdatesEnabled(False) 期间的内容一行都没画过，
-        # 重新打开会触发一次完整重绘，正好把扫描结果一次性铺上去。
-        self.setUpdatesEnabled(True)
         self.btn_scan.setEnabled(True)
         self.btn_scan.setText(T("重新扫描"))
         self.btn_expand.setEnabled(True)
@@ -670,6 +689,11 @@ class MainWindow(QMainWindow):
         self._next = w       # 不给引用会被 GC 掉，窗口一闪就没
 
     # ---------------- 主题 ----------------
+    def _set_byline(self, accent: str) -> None:
+        byline = f'{engine.OWNER} {T("GitHub")} v{engine.__version__}'
+        self.ver.setText(f'<a href="{engine.REPO}" style="color:{accent};'
+                         f'text-decoration:none">{byline}</a>')
+
     def apply_theme(self, idx: int) -> None:
         key = self.cb_theme.itemData(idx)
         t = engine.THEMES.get(key)
@@ -684,6 +708,9 @@ class MainWindow(QMainWindow):
             _check_png_cache[t["onaccent"]] = check
         qa.setStyleSheet(build_qss(t).replace("__CHECK__", check))
         self.theme = key
+        # 署名链接是富文本，颜色写死在 HTML 里，换主题要重刷
+        if hasattr(self, "ver"):
+            self._set_byline(t["accent"])
         # 勾选底色是按主题算的，换主题要重刷一遍（palette 改色，不重解析样式表）
         global SEL_TINT
         SEL_TINT = t["sel"]

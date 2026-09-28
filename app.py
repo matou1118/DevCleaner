@@ -7,6 +7,8 @@ APP_NAME = "DevCleaner"
 REPO_OWNER = "matou1118"
 REPO_NAME = "DevCleaner"
 REPO = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
+# 界面上显示的署名。GitHub 用户名是全小写的 matou1118，但署名字首大写好看。
+OWNER = "Matou1118"
 import ctypes
 import fnmatch
 import json
@@ -501,13 +503,35 @@ class PythonScanner(Scanner):
         return out
 
 
+def _no_window() -> int:
+    """Windows: 拉起子进程时别给它分配控制台。
+
+    本程序打包成 console=False（GUI 子系统），自己没有控制台。Windows 的规则是
+    控制台程序继承父进程的控制台，GUI 程序没有 -> 系统必须**新建**一个控制台
+    窗口给子进程。于是每跑一次 git，屏幕上就闪一个黑框出来再消失 —— 扫描时
+    每个 git 仓库闪一次，就是用户看到的"弹窗拖影"和"吓一跳"。
+
+    CREATE_NO_WINDOW 正好解决这个：创建子进程但不分配控制台。
+    """
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _hidden_startupinfo():
+    """再兜一层：明确让子进程窗口不可见。"""
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0          # SW_HIDE
+    return si
+
+
 def _git_meta(git_root: str) -> Tuple[Optional[str], Optional[str]]:
     """(最后提交日期, remote 地址) —— 有 origin 基本就是正经项目，没有的多半是临时 clone"""
     def run(args: List[str]) -> Optional[str]:
         try:
             res = subprocess.run(["git", "-C", git_root] + args,
                                  capture_output=True, text=True, errors="replace",
-                                 timeout=8)
+                                 timeout=8, creationflags=_no_window(),
+                                 startupinfo=_hidden_startupinfo())
             if res.returncode == 0:
                 v = res.stdout.strip()
                 return v or None
@@ -1122,7 +1146,8 @@ def _has_unpushed(git_root: str) -> bool:
     try:
         r = subprocess.run(["git", "-C", git_root, "status", "--porcelain"],
                            capture_output=True, text=True, errors="replace",
-                           timeout=10)
+                           timeout=10, creationflags=_no_window(),
+                           startupinfo=_hidden_startupinfo())
         return bool(r.stdout.strip())
     except (OSError, subprocess.SubprocessError):
         return False

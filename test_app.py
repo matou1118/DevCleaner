@@ -1173,60 +1173,118 @@ def t_web_site():
             assert need in c and c[need] != "", f"stats.json 的分类缺 {need}: {c}"
 
 
-def t_no_marquee_ghosting():
-    """扫描期不得重绘 —— 满屏闪和「像有弹窗拖影」的根因。
+def t_scan_paint_throttled():
+    """扫描期的重绘要限频，进度条不能被关掉。
 
-    之前以为是走马灯进度条在刷，掐掉回调后仍有数百次重绘：扫描线程每拿到
-    一个 GIL 时间片就会唤醒主线程去 processEvents，单次扫描 MainWindow 自己
-    就被重绘十几次，而任意一次重绘都是全窗（160+ 个带样式的子控件）。
-    进度条不是元凶，扫描期间的整窗重绘才是。所以扫描期直接关掉窗口更新，
-    结束时统一铺一次。
+    走过的弯路：曾用 setUpdatesEnabled(False) 消除重绘，结果进度条也没了
+    （用户反馈"没有进度条"），而 tools/screenprobe.py 抓屏实测显示窗口像素
+    本来就是稳的 —— 31 秒 402 帧只有 8 帧变化，全在进度条那一行。
+    starve.py 也显示主线程拿到 100% 时间片、零卡顿。所以关更新是砍错地方。
+
+    现在锁的正确不变量：
+    1. 进度条还在（setUpdatesEnabled 不为 False）
+    2. 同一句阶段文字连喂 50 次，setText 只能触发 0 次
+    3. 同一个百分比重复回调，setValue 不能重复触发
     """
     import gui
-    from PySide6.QtCore import QEvent, QObject
     from PySide6.QtWidgets import QApplication
     import time
-
-    class Counter(QObject):
-        def __init__(self):
-            super().__init__()
-            self.n = 0
-            self.by_type = {}
-
-        def eventFilter(self, obj, ev):
-            if ev.type() == QEvent.Type.Paint:
-                self.n += 1
-                name = type(obj).__name__
-                self.by_type[name] = self.by_type.get(name, 0) + 1
-            return False
-
     qa = QApplication.instance() or QApplication([])
     w = gui.MainWindow()
     w.show()
+    w.start_scan()
+    assert w.updatesEnabled() is True, \
+        "扫描期不能关窗口更新 —— 那样进度条也没了，而它本来就不是闪的根源"
+    w.thread and w.thread.wait(300000)
+
+    # 2. 阶段文字去重
+    label = w.stage
+    calls = {"n": 0}
+    orig = label.setText
+    label.setText = lambda v: (calls.__setitem__("n", calls["n"] + 1), orig(v))[1]
+    w._last_stage_text = "SENTINEL"
+    w._last_stage = time.monotonic()
+    for _ in range(50):
+        w._on_progress("SENTINEL", 0.5)
+    assert calls["n"] == 0, f"同一句阶段文字被 setText {calls['n']} 次（每次=全窗重绘）"
+
+    # 3. 百分比去重：同一值重复回调不该重复 setValue
+    vcalls = {"n": 0}
+    vorig = w.prog.setValue
+    w.prog.setValue = lambda v: (vcalls.__setitem__("n", vcalls["n"] + 1), vorig(v))[1]
+    w._last_pct = 40
+    for _ in range(20):
+        w._on_progress("别的", 0.40)
+    assert vcalls["n"] == 0, f"同一百分比触发了 {vcalls['n']} 次 setValue"
+    # 值真的变了还是要更新
+    w._on_progress("别的", 0.77)
+    assert vcalls["n"] == 1, f"百分比变了却没更新（{vcalls['n']} 次）"
+
+    label.setText = orig
+    w.prog.setValue = vorig
+    w.close()
+
+
+def t_byline_version_link():
+    """底栏要有「署名 + GitHub 链接 + 版本号」，且链接指向正确的仓库。
+
+    用户明确要求显示 "Matou1118 GitHub v0.1.0" 并可点进仓库。
+    """
+    import gui
+    from PySide6.QtWidgets import QApplication
+    qa = QApplication.instance() or QApplication([])
+    w = gui.MainWindow()
     w._remember = False
     w.apply_theme(w.cb_theme.currentIndex())
-    QApplication.processEvents()
 
-    pc = Counter()
-    qa.installEventFilter(pc)
-    pc.n = 0
-    w.start_scan()
-    # 扫描期窗口更新关着，setValue 也不该引起重绘
-    assert w.updatesEnabled() is False, "扫描期必须关掉窗口更新，否则满屏闪"
-    while w.thread and w.thread.isRunning():
-        QApplication.processEvents()
-        time.sleep(0.005)
-    QApplication.processEvents()
-    assert w.updatesEnabled() is True, "扫描结束必须恢复更新，否则结果是空窗"
-
-    # 真正的验收标准不是"设了个标志"，而是重绘次数真的降下来了。
-    # MainWindow 每次重绘都是一次全窗重绘 —— 超过 3 次就还会闪。
-    main_paints = pc.by_type.get("MainWindow", 0)
+    html = w.ver.text()
+    assert app.OWNER in html, f"底栏没有署名: {html!r}"
+    assert app.REPO in html, f"没有仓库链接: {html!r}"
+    assert app.__version__ in html, f"没有版本号: {html!r}"
+    assert "Matou1118" in html, f"署名大小写不对: {html!r}"
+    # 必须是外链，点了交给系统浏览器，不能在应用内导航
+    assert w.ver.openExternalLinks() is True, "GitHub 链接没开外链"
+    # 换主题后链接颜色要跟着变（富文本颜色写死在 HTML 里）
+    w.apply_theme(w.cb_theme.currentIndex())
+    assert app.THEMES[w.theme]["accent"] in w.ver.text(), \
+        f"换主题后链接颜色没更新: {w.ver.text()!r}"
     w.close()
-    assert main_paints <= 3, \
-        f"扫描期 MainWindow 被重绘 {main_paints} 次（每次=全窗），闪没解决"
-    assert pc.n <= 40, f"扫描期总重绘 {pc.n} 次，超过阈值 40"
-    return pc.n
+
+
+def t_no_console_flash():
+    """打包成 GUI 程序后，任何子进程都不能再闪控制台窗口。
+
+    这是"扫描时满屏闪、像有弹窗拖影"的真正根因。Windows 的规则：控制台程序
+    继承父进程的控制台，GUI 子系统程序没有 -> 系统必须给子进程**新建**一个
+    控制台窗口。DevCleaner 扫描时会 `subprocess.run(["git", ...])`，于是每跑
+    一次 git 屏幕上就闪一个黑框，实测一次扫描闪 41 次（tools/popupprobe.py
+    抓到 ConsoleWindowClass，标题 'git.exe'，515367px）。
+
+    修法是 creationflags=CREATE_NO_WINDOW + STARTUPINFO SW_HIDE。
+    这个测试做静态检查：所有 spawn 点必须带 creationflags。
+    """
+    import re as _re
+    root = Path(__file__).parent
+    pat = _re.compile(r"subprocess\.(run|Popen|call|check_output|check_call)\(")
+    bad = []
+    for f in ("app.py", "gui.py", "lang.py"):
+        src = (root / f).read_text(encoding="utf-8")
+        lines = src.splitlines()
+        for i, ln in enumerate(lines):
+            if not pat.search(ln):
+                continue
+            # 往后看 8 行，creationflags 可能换行了
+            blk = "\n".join(lines[i:i + 8])
+            if "creationflags" not in blk:
+                bad.append(f"{f}:{i + 1}  {ln.strip()[:70]}")
+    assert not bad, (
+        "这些子进程没加 creationflags=CREATE_NO_WINDOW，打包成 GUI 程序后"
+        "每次都会闪一个控制台窗口：\n  " + "\n  ".join(bad))
+
+    # 顺便确认辅助函数在
+    src = (root / "app.py").read_text(encoding="utf-8")
+    assert "CREATE_NO_WINDOW" in src, "app.py 里没有 CREATE_NO_WINDOW"
+    assert "STARTF_USESHOWWINDOW" in src, "缺少 STARTUPINFO 兜底"
 
 
 # ---------------- 双语文档 ----------------
@@ -1396,7 +1454,9 @@ if __name__ == "__main__":
         check("dist 打包产物完整", t_dist_bundle_sane)
         check("界面文案英译无遗漏", t_i18n_complete)
         check("静态站页面与对比度", t_web_site)
-        check("扫描期无走马灯/无重复重绘", t_no_marquee_ghosting)
+        check("扫描期重绘限频（进度条保留）", t_scan_paint_throttled)
+        check("底栏署名+GitHub 链接+版本号", t_byline_version_link)
+        check("子进程不闪控制台窗口", t_no_console_flash)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
