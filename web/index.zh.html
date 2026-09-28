@@ -140,6 +140,9 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
 .foot{display:flex;gap:22px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .foot nav{display:flex;gap:20px;height:auto}
 .foot a{color:var(--fg3)}.foot a:hover{color:var(--fg)}
+.lic{max-width:var(--max);margin:26px auto 0;padding:0 24px;font-size:.86rem;color:var(--fg2);line-height:1.75}
+.lic b{color:var(--fg)}
+.lic a{text-decoration:underline}
 .rv{opacity:1}
 .js .rv{opacity:0;transform:translateY(26px);transition:.7s cubic-bezier(.2,.7,.3,1)}
 .js .rv.in{opacity:1;transform:none}
@@ -177,7 +180,7 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
 
 <div class="wrap">
   <div class="hero">
-    <div class="badge rv"><span class="tag">v0.1.0</span> 开源 · MIT · Windows</div>
+    <div class="badge rv"><span class="tag">v0.1.0</span> 开源 · CC BY-NC 4.0 · Windows</div>
     <h1 class="rv">找出真正能<br><span class="grad">安全删掉的东西</span></h1>
     <p class="lede rv">一个会把自己的判据摊开给你看的清理工具。十类判据驱动的扫描器，
       文件进回收站，注册表删前先备份 —— 每一条旁边都写清楚为什么。</p>
@@ -298,8 +301,11 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
   </div>
 </div></section>
 
+<p class="lic">许可：CC BY-NC 4.0 — 可以修改和二次开发，
+  <b>必须署名 Matou1118</b>，<b>不允许商用</b>。
+  <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">条款全文 · Full terms</a></p>
 <footer><div class="wrap foot">
-  <div>DevCleaner v0.1.0 · MIT · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
+  <div>DevCleaner v0.1.0 · CC BY-NC 4.0 · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
   <nav style="display:flex;gap:20px">
     <a href="https://github.com/matou1118/DevCleaner">源码</a>
     <a href="https://github.com/matou1118/DevCleaner/releases">版本发布</a>

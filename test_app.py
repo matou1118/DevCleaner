@@ -1151,10 +1151,22 @@ def t_web_site():
             assert ratio >= 4.5, \
                 f"{label} 版{what} ({fg}={var[fg]} on {bg}) 只有 {ratio:.2f}:1，AA 要 4.5:1"
 
+    # 站点上不许有 MIT 残留 —— 许可换了，站点必须跟着换。
+    # 这个坑踩过：LICENSE 和 README 都改成 CC BY-NC 了，站点脚注还写着 MIT。
+    for name in ("index.html", "index.zh.html", "404.html"):
+        t = (web / name).read_text(encoding="utf-8")
+        assert "MIT" not in t, f"web/{name} 还写着 MIT，许可已经换成 CC BY-NC 4.0"
+    # 而且站上得能看到条款
+    for name in ("index.html", "index.zh.html"):
+        t = (web / name).read_text(encoding="utf-8")
+        assert "CC BY-NC 4.0" in t, f"web/{name} 没写许可"
+        assert "Matou1118" in t, f"web/{name} 没写署名"
+        assert "LICENSE" in t, f"web/{name} 没链到许可全文"
+
     # 关键卖点必须在两版上都在，不能被改没了
-    for phrase in ("Recycle Bin", "MIT"):
+    for phrase in ("Recycle Bin",):
         assert phrase in idx, f"英文首页少了关键信息: {phrase}"
-    for phrase in ("回收站", "MIT"):
+    for phrase in ("回收站",):
         assert phrase in zh, f"中文首页少了关键信息: {phrase}"
 
     # 数字不许写死在 HTML 里：必须来自 stats.json（跑真实扫描生成）。
