@@ -760,51 +760,51 @@ class MainWindow(QMainWindow):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
-            self.btn_clean.setEnabled(False)
-            self.setCursor(Qt.CursorShape.WaitCursor)
-            ok_n: List[str] = []
-            fail: List[str] = []
-            backups: List[str] = []
-            for i in sel:
-                if i.path.startswith("REG:"):
-                    good, msg = engine.apply_registry_item(i)
-                    if good:
-                        ok_n.append(i.name)
-                        if "备份" in msg:
-                            backups.append(msg.split("备份", 1)[1].strip())
-                    else:
-                        fail.append(f"{i.name}（{msg}）")
-                    continue
-                if i.path.startswith("BULK:"):
-                    a, b, errs = engine.delete_bulk(i.path)
-                    ok_n.append(f"{i.name}（{a} 项）")
-                    if b:
-                        fail.extend(errs[:5])
-                    continue
-                p = Path(i.path)
-                if not p.exists():
-                    fail.append(f"{i.name}（已不存在）")
-                    continue
-                if engine.file_locked(p):
-                    fail.append(f"{i.name}（被进程占用）")
-                    continue
-                good, msg = engine.to_recycle_bin(i.path)
+        self.btn_clean.setEnabled(False)
+        self.setCursor(Qt.CursorShape.WaitCursor)
+        ok_n: List[str] = []
+        fail: List[str] = []
+        backups: List[str] = []
+        for i in sel:
+            if i.path.startswith("REG:"):
+                good, msg = engine.apply_registry_item(i)
                 if good:
                     ok_n.append(i.name)
+                    if "备份" in msg:
+                        backups.append(msg.split("备份", 1)[1].strip())
                 else:
                     fail.append(f"{i.name}（{msg}）")
-            self.unsetCursor()
-            report = [f"成功 {len(ok_n)} 项"]
-            if backups:
-                report.append("\n注册表备份位置：\n" + "\n".join(sorted(set(backups))))
-            if ok_n and not regs:
-                report.append("\n文件已进入回收站，清空回收站后才会真正释放空间。")
-            if fail:
-                report.append(f"\n未处理 {len(fail)} 项：\n· " + "\n· ".join(fail[:15]))
-            QMessageBox.information(self, T("清理结果"), "\n".join(report))
-            self.bulk(False)
-            self._render()
-            self.recalc()
+                continue
+            if i.path.startswith("BULK:"):
+                a, b, errs = engine.delete_bulk(i.path)
+                ok_n.append(f"{i.name}（{a} 项）")
+                if b:
+                    fail.extend(errs[:5])
+                continue
+            p = Path(i.path)
+            if not p.exists():
+                fail.append(f"{i.name}（已不存在）")
+                continue
+            if engine.file_locked(p):
+                fail.append(f"{i.name}（被进程占用）")
+                continue
+            good, msg = engine.to_recycle_bin(i.path)
+            if good:
+                ok_n.append(i.name)
+            else:
+                fail.append(f"{i.name}（{msg}）")
+        self.unsetCursor()
+        report = [f"成功 {len(ok_n)} 项"]
+        if backups:
+            report.append("\n注册表备份位置：\n" + "\n".join(sorted(set(backups))))
+        if ok_n and not regs:
+            report.append("\n文件已进入回收站，清空回收站后才会真正释放空间。")
+        if fail:
+            report.append(f"\n未处理 {len(fail)} 项：\n· " + "\n· ".join(fail[:15]))
+        QMessageBox.information(self, T("清理结果"), "\n".join(report))
+        self.bulk(False)
+        self._render()
+        self.recalc()
 
 
 class ConfirmDialog(QDialog):

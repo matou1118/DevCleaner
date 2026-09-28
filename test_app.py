@@ -32,6 +32,16 @@ def check(name, fn):
 
 
 # ---------------- 基础工具 ----------------
+_TMP: list = []
+
+
+def tmpdir(prefix: str = "devcleaner_test_") -> Path:
+    """本次测试的临时目录，退出时统一清（见 cleanup）。"""
+    d = Path(tempfile.mkdtemp(prefix=prefix))
+    _TMP.append(d)
+    return d
+
+
 def t_human():
     assert human(0) in ("0 B", "0.00 B"), human(0)
     assert human(2048) == "2.00 KB", human(2048)
