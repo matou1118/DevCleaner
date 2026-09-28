@@ -369,6 +369,76 @@ class ScanThread(QThread):
         self.done.emit()
 
 
+class CleanThread(QThread):
+    """后台执行清理，避免阻塞 GUI 事件循环。
+
+    旧代码把删除循环直接跑在主线程上，file_locked 又逐文件遍历所有进程，
+    proc.open_files() 在某些系统进程上会无限阻塞 → 界面卡死、清理走不到。
+    """
+    progressed = Signal(str, int, int)          # 当前条目名, 已完成, 总数
+    done = Signal(list, list, list)             # ok_names, failures, backups
+
+    def __init__(self, sel: List) -> None:
+        super().__init__()
+        self.sel = sel
+
+    def run(self) -> None:
+        # SHFileOperationW 是 Shell COM API，在未初始化 COM 的线程里调用会死锁。
+        # GUI 线程由 Qt 自动初始化了 COM，但 QThread 不会继承。这里手动初始化 STA。
+        import ctypes
+        try:
+            ctypes.windll.ole32.CoInitializeEx(None, 0x2)   # COINIT_APARTMENTTHREADED
+        except OSError:
+            pass
+        try:
+            self._run_body()
+        finally:
+            try:
+                ctypes.windll.ole32.CoUninitialize()
+            except OSError:
+                pass
+
+    def _run_body(self) -> None:
+        ok_n: List[str] = []
+        fail: List[str] = []
+        backups: List[str] = []
+        # 批量检测占用：只遍历一次进程列表，而非逐文件遍历
+        file_paths = [i.path for i in self.sel
+                      if not i.path.startswith("REG:") and not i.path.startswith("BULK:")]
+        locked = engine.locked_set(file_paths)
+        total = len(self.sel)
+        for idx, i in enumerate(self.sel):
+            self.progressed.emit(i.name, idx, total)
+            if i.path.startswith("REG:"):
+                good, msg = engine.apply_registry_item(i)
+                if good:
+                    ok_n.append(i.name)
+                    if "备份" in msg:
+                        backups.append(msg.split("备份", 1)[1].strip())
+                else:
+                    fail.append(f"{i.name}（{msg}）")
+                continue
+            if i.path.startswith("BULK:"):
+                a, b, errs = engine.delete_bulk(i.path)
+                ok_n.append(f"{i.name}（{a} 项）")
+                if b:
+                    fail.extend(errs[:5])
+                continue
+            p = Path(i.path)
+            if not p.exists():
+                fail.append(f"{i.name}（已不存在）")
+                continue
+            if os.path.normcase(i.path) in locked:
+                fail.append(f"{i.name}（被进程占用）")
+                continue
+            good, msg = engine.to_recycle_bin(i.path)
+            if good:
+                ok_n.append(i.name)
+            else:
+                fail.append(f"{i.name}（{msg}）")
+        self.done.emit(ok_n, fail, backups)
+
+
 # ============================ 主窗口 ============================
 
 
@@ -382,6 +452,8 @@ class MainWindow(QMainWindow):
         self.cards: List[CategoryCard] = []
         self.notes_cards: List[CategoryCard] = []
         self.thread: Optional[ScanThread] = None
+        self.clean_thread: Optional[CleanThread] = None
+        self.clean_thread: Optional[CleanThread] = None
         self.theme = engine.DEFAULT_THEME
         self._remember = True     # 构造期套用默认主题时不回写配置
         self._last_stage_text = ""
@@ -735,6 +807,10 @@ class MainWindow(QMainWindow):
         sel = [i for i in engine.STATE.items if i.path in self.pick]
         if not sel:
             return
+        if self.clean_thread and self.clean_thread.isRunning():
+            return
+        if self.clean_thread and self.clean_thread.isRunning():
+            return
         risky = [i for i in sel if i.risk == "caution"]
         regs = [i for i in sel if i.path.startswith("REG:")]
         # 明细最多列 60 条，剩下的在末尾汇总 —— 列表可滚动了，不用那么保守
@@ -762,42 +838,28 @@ class MainWindow(QMainWindow):
 
         self.btn_clean.setEnabled(False)
         self.setCursor(Qt.CursorShape.WaitCursor)
-        ok_n: List[str] = []
-        fail: List[str] = []
-        backups: List[str] = []
-        for i in sel:
-            if i.path.startswith("REG:"):
-                good, msg = engine.apply_registry_item(i)
-                if good:
-                    ok_n.append(i.name)
-                    if "备份" in msg:
-                        backups.append(msg.split("备份", 1)[1].strip())
-                else:
-                    fail.append(f"{i.name}（{msg}）")
-                continue
-            if i.path.startswith("BULK:"):
-                a, b, errs = engine.delete_bulk(i.path)
-                ok_n.append(f"{i.name}（{a} 项）")
-                if b:
-                    fail.extend(errs[:5])
-                continue
-            p = Path(i.path)
-            if not p.exists():
-                fail.append(f"{i.name}（已不存在）")
-                continue
-            if engine.file_locked(p):
-                fail.append(f"{i.name}（被进程占用）")
-                continue
-            good, msg = engine.to_recycle_bin(i.path)
-            if good:
-                ok_n.append(i.name)
-            else:
-                fail.append(f"{i.name}（{msg}）")
+        self.stage.setText(T("清理中…"))
+        self._clean_has_regs = bool(regs)
+        self.clean_thread = CleanThread(sel)
+        self.clean_thread.progressed.connect(self._on_clean_progress)
+        self.clean_thread.done.connect(self._on_clean_done)
+        self.clean_thread.start()
+
+    def _on_clean_progress(self, name: str, done: int, total: int) -> None:
+        self.stage.setText(T(f"清理中 {done}/{total} · {name}"))
+        if total > 0:
+            self.prog.setRange(0, total)
+            self.prog.setValue(done)
+
+    def _on_clean_done(self, ok_n: List[str], fail: List[str],
+                       backups: List[str]) -> None:
         self.unsetCursor()
+        self.prog.setRange(0, 100)
+        self.prog.setValue(100)
         report = [f"成功 {len(ok_n)} 项"]
         if backups:
             report.append("\n注册表备份位置：\n" + "\n".join(sorted(set(backups))))
-        if ok_n and not regs:
+        if ok_n and not getattr(self, "_clean_has_regs", False):
             report.append("\n文件已进入回收站，清空回收站后才会真正释放空间。")
         if fail:
             report.append(f"\n未处理 {len(fail)} 项：\n· " + "\n· ".join(fail[:15]))

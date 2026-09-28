@@ -287,6 +287,31 @@ def file_locked(p: Path) -> bool:
     return False
 
 
+def locked_set(paths) -> set:
+    """一次性收集被进程占用的路径集合（normcase 后）。
+
+    file_locked 每调一次就遍历所有进程，N 个文件 × M 个进程开销爆炸，
+    且 proc.open_files() 在某些系统进程上会无限阻塞。这里只遍历一次进程
+    列表，把命中目标路径的收集起来，供清理线程批量查询。
+    """
+    targets = {os.path.normcase(str(p)) for p in paths}
+    if not targets:
+        return set()
+    found: set = set()
+    try:
+        for proc in psutil.process_iter(["pid"]):
+            try:
+                for f in proc.open_files():
+                    nf = os.path.normcase(f.path)
+                    if nf in targets:
+                        found.add(nf)
+            except (psutil.Error, OSError):
+                continue
+    except psutil.Error:
+        pass
+    return found
+
+
 # ============================ 回收站删除 ============================
 
 
