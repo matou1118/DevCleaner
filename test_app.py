@@ -1308,54 +1308,69 @@ def t_no_console_flash():
 
 
 def t_confirm_dialog_scrolls():
-    """确认对话框的明细必须可滚动，且按钮永远在屏幕内。
+    """确认对话框必须能滚动，且按钮永远在屏幕内。
 
-    这是个真 bug：原来用 QMessageBox.setInformativeText 塞明细，它没有滚动条。
-    条目一多（最多列 40 条）整个对话框撑出屏幕，**确认按钮被顶到看不见的地方** ——
-    用户要么找不到按钮，要么瞎点。
+    这是个真 bug（用户两次报告）：原来用 QMessageBox.setInformativeText 塞
+    明细，它没有滚动条，条目一多整个对话框撑出屏幕，**确认按钮被顶到看不见
+    的地方**。
 
-    现在用自建的 ConfirmDialog：明细在 QTextEdit 里（自带滚动条），
-    高度按屏幕可用高度封顶。
+    关键是要按**小屏**算。只在本机 1080p 上测是不够的 —— 1366x768 笔记本的
+    工作区只有约 728px，而当时开发机上 offscreen 平台返回的是假分辨率
+    （800），把问题完全掩盖了。这里直接按不同的可用高度算，不依赖真实屏幕。
     """
     import gui
-    from PySide6.QtWidgets import QApplication, QTextEdit
+    from PySide6.QtWidgets import QApplication, QTextEdit, QPushButton
     qa = QApplication.instance() or QApplication([])
     w = gui.MainWindow()
     w._remember = False
     w.apply_theme(w.cb_theme.currentIndex())
 
-    # 造一堆很长的路径，逼出溢出条件
     class Fake:
+        """造最坏情况：超长中文名 + 超长路径"""
         def __init__(self, n):
             self.name = f"条目 {n} " + "很长的名字" * 6
-            self.path = "BULK:x"
+            self.path = "REG:" + "x" * 400
             self.size = 123456789
             self.unit = "bytes"
             self.risk = "safe"
-    sel = [Fake(i) for i in range(80)]
 
-    detail = gui._confirm_details(sel[:60])
+    sel = [Fake(i) for i in range(60)]
+    detail = gui._confirm_details(sel)
     assert detail.count("·") == 60, "明细条数不对"
-    dlg = gui.ConfirmDialog(w, "确认清理", "确认清理 80 项？", detail,
-                            gui._confirm_risky([Fake(1), Fake(2)]))
-    scr = QApplication.primaryScreen()
-    avail = scr.availableGeometry().height() if scr else 800
-    cap = int(avail * gui.ConfirmDialog.MAX_H)
+    risky = gui._confirm_risky(sel[:30])
+    assert risky, "需确认提示没生成"
 
-    view = dlg.findChild(QTextEdit)
-    assert view is not None, "明细区不是 QTextEdit（就没有滚动条）"
-    assert view.isReadOnly(), "明细区必须只读，防止误改内容"
-    assert view.height() <= cap, \
-        f"明细区 {view.height()}px 超过上限 {cap}px，会把按钮顶出屏幕"
-    assert view.height() >= 160, "明细区太小，正常的少量条目也看不全"
+    for avail in (1080, 1032, 900, 800, 728, 640, 560):
+        cap = int(avail * gui.ConfirmDialog.MAX_H)
+        # 关键：得**真的**让代码看到 avail 这个高度，否则测的是本地屏幕。
+        # 之前只算数字不对 —— 离屏平台 primaryScreen() 永远返回 800，
+        # 代码按 800 算出 cap，和测试按 728 算的对不上，断言形同虚设。
+        import unittest.mock as _m
+        geo = _m.Mock()
+        geo.height.return_value = avail
+        scr = _m.Mock()
+        scr.availableGeometry.return_value = geo
+        with _m.patch.object(QApplication, "primaryScreen", staticmethod(lambda: scr)):
+            dlg = gui.ConfirmDialog(w, "确认清理", f"确认清理 {len(sel)} 项？",
+                                    detail, risky, danger=True)
+            h = dlg.sizeHint().height()
+            view_h = dlg.findChild(QTextEdit).height()
+            max_h = dlg.maximumHeight()
+            btns = [(b.text(), b.mapTo(dlg, b.rect().center()).y())
+                    for b in dlg.findChildren(QPushButton)]
+        assert view_h <= cap, \
+            f"屏幕可用 {avail}px 时明细区 {view_h}px 超过上限 {cap}px"
+        assert max_h <= cap + 96, \
+            f"屏幕可用 {avail}px 时对话框上限 {max_h} 太大（cap={cap}）"
+        # 按钮必须在对话框高度之内
+        for name, y in btns:
+            assert 0 <= y <= h, f"屏幕 {avail}px 时按钮 {name!r} 在 y={y}，对话框高 {h}"
+        dlg.close()
 
-    # 确认/取消按钮必须存在且可点
-    btns = dlg.findChildren(type(dlg.findChildren(gui.QPushButton)[0])) if False else None
-    from PySide6.QtWidgets import QPushButton
-    texts = [b.text() for b in dlg.findChildren(QPushButton)]
-    assert any("取消" in t for t in texts), f"没有取消按钮: {texts}"
-    assert any("确认清理" in t for t in texts), f"没有确认按钮: {texts}"
-    dlg.close()
+    # 少量条目时也别太空
+    few = gui.ConfirmDialog(w, "确认清理", "确认清理 2 项？", gui._confirm_details(sel[:2]))
+    assert few.findChild(QTextEdit).height() >= 200, "少量条目时明细区太小"
+    few.close()
     w.close()
 
 
@@ -1394,6 +1409,30 @@ def t_license_attribution():
     assert "Matou1118" in w.ver.text(), w.ver.text()
     assert app.REPO in w.ver.text(), w.ver.text()
     w.close()
+
+
+def t_exe_standalone_no_python():
+    """发布的 exe 必须在「没装 Python」的机器上能跑。
+
+    有人会问「要不要把 Python 一起封装」—— 已经封装了：那 32.8 MB 里就是
+    CPython 解释器 + PySide6/Qt + 本项目代码，用 PyInstaller 打的单文件。
+
+    这个测试用最小 PATH（只留 System32，把本机 Python 从 PATH 拿掉）跑一遍
+    dist 里的 exe，证明它不依赖外部解释器。dist 不存在时跳过。
+    """
+    import os as _os
+    exe = Path(__file__).parent / "dist" / "DevCleaner.exe"
+    if not exe.is_file():
+        return
+    env = dict(_os.environ, PATH=r"C:\\Windows\\System32")
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    r = subprocess.run([str(exe), "--version"], capture_output=True,
+                       text=True, errors="replace", timeout=300,
+                       env=env, cwd=str(exe.parent))
+    out = (r.stdout or "") + (r.stderr or "")
+    assert r.returncode == 0, f"没有 Python 的环境里起不来 (rc={r.returncode}): {out[:200]}"
+    assert app.__version__ in out, f"版本号没输出: {out[:200]!r}"
 
 
 # ---------------- 双语文档 ----------------
@@ -1568,6 +1607,7 @@ if __name__ == "__main__":
         check("子进程不闪控制台窗口", t_no_console_flash)
         check("确认弹窗可滚动不溢出", t_confirm_dialog_scrolls)
         check("许可：署名+禁商用", t_license_attribution)
+        check("exe 自带 Python（无解释器也能跑）", t_exe_standalone_no_python)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -47,9 +47,9 @@ def build_qss(t: Dict[str, str]) -> str:
    = 全窗重绘」。实测 14 次进度回调引发 81 次 Paint、MainWindow 被重绘 17 次，
    扫描期肉眼就是满屏闪。底色只画一次，子控件透明，重绘就停在原地。 */
 QMainWindow, QWidget#root {{ background:{t['bg']}; }}
-QWidget, QLabel, QCheckBox, QScrollArea, QTextEdit, QProgressBar {{
+QLabel, QCheckBox, QScrollArea, QTextEdit, QProgressBar {{
   color:{t['fg']}; font-family:"Microsoft YaHei UI","Segoe UI",sans-serif; font-size:13px;
-  background:transparent; border:none; }}
+  border:none; }}
 QScrollArea > QWidget > QWidget {{ background:transparent; border:none; }}
 
 #title    {{ font-size:20px; font-weight:600; color:{t['fg']}; }}
@@ -811,48 +811,48 @@ class ConfirmDialog(QDialog):
     """确认清理对话框，明细列表可上下滚动。
 
     为什么不用 QMessageBox：它的 setInformativeText 没有滚动条，条目一多
-    （这里最多列 40 条）整个对话框就撑到超出屏幕，**确认按钮被顶到看不见
-    的地方** —— 用户要么看不到按钮，要么瞎点。而且 QMessageBox 的高度没法
-    跟屏幕尺寸挂钩。
+    （这里最多列 60 条）整个对话框就撑到超出屏幕，**确认按钮被顶到看不见
+    的地方** —— 用户要么看不到按钮，要么瞎点。
 
-    这里的做法：明细放 QTextEdit（自带滚动条 + 只读 + 可选中复制路径），
-    对话框高度按屏幕可用高度算一个上限，永远保证按钮在可视区内。
+    这里的做法：说明文字和明细**全部**放进一个 QTextEdit（自带滚动条、
+    只读、可选中复制路径），对话框高度按屏幕可用高度硬封顶。这样不管
+    说明多长、条目多少，按钮永远在可视区内。
     """
 
-    MAX_H = 0.72          # 占屏幕高度比例上限
+    MAX_H = 0.60          # 占屏幕可用高度比例上限。留足任务栏和标题栏
 
     def __init__(self, parent, title: str, summary: str, detail: str,
                  risky: str = "", danger: bool = False):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(580)
 
         v = QVBoxLayout(self)
         v.setContentsMargins(20, 18, 20, 16)
         v.setSpacing(10)
 
+        # 摘要单独一行（最重要的一句，不该被滚走）；其余全部进滚动区
         head = _lbl(summary, "itemName")
         head.setWordWrap(True)
         v.addWidget(head)
 
+        body = []
         if risky:
-            rl = _lbl(risky, "itemErr")
-            rl.setWordWrap(True)
-            v.addWidget(rl)
-
+            body.append(risky)
         if detail:
-            # QTextEdit 自带滚动条；只读；等宽字体方便对路径
+            body.append(detail)
+        if body:
             self.view = QTextEdit()
             self.view.setReadOnly(True)
-            self.view.setPlainText(detail)
             self.view.setObjectName("detail")
+            self.view.setPlainText("\n\n".join(body))
+            # 高度：按内容算，但绝不超上限；下限保证少量条目时也别太小
             fm = self.view.document().documentLayout().documentSize()
-            h = int(fm.height()) + 12
             scr = QApplication.primaryScreen()
             avail = scr.availableGeometry().height() if scr else 800
             cap = int(avail * self.MAX_H)
-            self.view.setFixedHeight(max(160, min(h, cap)))
+            self.view.setFixedHeight(max(200, min(int(fm.height()) + 16, cap)))
             v.addWidget(self.view, 1)
 
         buttons = QHBoxLayout()
@@ -867,6 +867,11 @@ class ConfirmDialog(QDialog):
         buttons.addWidget(b_cancel)
         buttons.addWidget(b_ok)
         v.addLayout(buttons)
+
+        # 双保险：整体高度也不许超过上限（防止某个平台忽略 QSS 或字体变大）。
+        # 余量 96px = 摘要(约2行) + 标题栏 + 按钮行(约36) + 上下边距(约34)。
+        # 不能再多 —— 728px 的小屏上每多 10px 余量都是在把按钮往屏幕外推。
+        self.setMaximumHeight(cap + 96)
 
 
 def _confirm_details(sel) -> str:
