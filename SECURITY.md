@@ -8,7 +8,7 @@
 
 ## 报告漏洞
 
-**不要开公开 Issue。** 用 GitHub 的 [私密漏洞报告](https://github.com/OWNER/DevCleaner/security/advisories/new)（Security → Report a vulnerability）。
+**不要开公开 Issue。** 用 GitHub 的 [私密漏洞报告](https://github.com/matou1118/DevCleaner/security/advisories/new)（Security → Report a vulnerability）。
 
 48 小时内我会确认收到，评估后给修复时间。
 

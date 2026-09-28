@@ -96,7 +96,7 @@ cmd 按 OEM 代码页读 `.bat`，中文和 `&` 组合会被误解析成不存�
 
 ### 测试
 
-29 项自检，`python test_app.py`。重点覆盖：
+35 项自检，`python test_app.py`。重点覆盖：
 
 - 离屏构建界面、6 套主题逐一切换
 - 注册表完整往返：建键 → 备份 → 删除 → `reg import` 还原 → 校验数据一致
@@ -108,6 +108,9 @@ cmd 按 OEM 代码页读 `.bat`，中文和 `&` 组合会被误解析成不存�
 - 勾选不上色走 `unpolish`/`polish`
 - 分类默认折叠、展开按钮真实点击
 - 改配置保留注释
+- 内部协议串（`REG:` / `BULK:`）不外泄到界面
+- 版本号与 CHANGELOG / README 同步、20 个开源必需文件齐全、无占位符残留
+- 仓库链接用户名一致、所有本地图片引用有效
 
-[未发布]: https://github.com/OWNER/DevCleaner/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/DevCleaner/releases/tag/v0.1.0
+[未发布]: https://github.com/matou1118/DevCleaner/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0

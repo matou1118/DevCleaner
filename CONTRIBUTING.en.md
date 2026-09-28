@@ -19,7 +19,7 @@ So:
 
 ```bash
 pip install -r requirements.txt
-python test_app.py        # 29 self-checks, ~40s
+python test_app.py        # 35 self-checks, ~50s
 python gui.py             # try it locally
 build.bat                 # package to dist\DevCleaner.exe
 ```

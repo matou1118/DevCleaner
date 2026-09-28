@@ -2,16 +2,19 @@
 
 A local disk cleaner for Windows. Native window (PySide6), single-file exe. **Works fully offline — no browser, no Node, no Java, no external runtime.**
 
-[![CI](https://github.com/OWNER/DevCleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/DevCleaner/actions/workflows/ci.yml)
+[![CI](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://learn.microsoft.com/windows/)
 
-**Current version v0.1.0** · [中文](README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.en.md) · [Security](SECURITY.en.md)
+**Current version v0.1.0** · [中文](README.md) · [📖 Usage guide](docs/usage.en.md) · [📷 All screenshots](docs/Screenshots.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.en.md) · [Security](SECURITY.en.md)
 
 Scanning starts the moment you open it. Categories are collapsed by default, so every category and its size fits on one screen. Expand the ones you care about, or hit "全部展开" (expand all).
 
-![Main window](docs/screenshot-dark.png)
+![Main window](docs/01-overview.png)
+
+> 📷 [More screenshots](docs/Screenshots.md): expanded view, confirmation dialog, registry section, all six themes
+> 📖 [Full usage guide](docs/usage.en.md): every config key explained, troubleshooting, design trade-offs
 
 ## What it finds
 
@@ -68,7 +71,7 @@ DevCleaner **generates the `.reg` files itself** rather than shelling out to `re
 
 ## Install
 
-Grab `DevCleaner.exe` from [Releases](https://github.com/OWNER/DevCleaner/releases) and double-click it. Scanning starts automatically; closing the window quits.
+Grab `DevCleaner.exe` from [Releases](https://github.com/matou1118/DevCleaner/releases) and double-click it. Scanning starts automatically; closing the window quits.
 
 Python 3.10+ is needed only to run from source or rebuild.
 
@@ -82,7 +85,7 @@ python app.py                # headless: run a scan and print results
 python app.py --json         # JSON output (for scripts)
 python app.py -c "registry"  # run one category only
 python gui.py                # native window
-python test_app.py           # 29 self-checks
+python test_app.py           # 35 self-checks
 build.bat                    # self-check -> clean -> PyInstaller onefile -> copy config
 ```
 
@@ -139,7 +142,7 @@ The design file specifies 7 primary colours. Secondary/tertiary text, border bri
 
 A dedicated test measures this: all 7 contrast pairs per theme must pass (body text ≥ 4.5:1; tertiary text and caution ≥ 3:1).
 
-![Themes](docs/screenshot-themes.png)
+![Themes](docs/themes/ink.png)
 
 ## Adding a scanner
 
@@ -156,7 +159,7 @@ class MyScanner(Scanner):
 
 Set `Item.unit = "count"` to have the UI show an **entry count** instead of bytes, and to exempt it from the `min_size_bytes` filter.
 
-![Registry](docs/screenshot-registry.png)
+![Registry](docs/04-registry.png)
 
 ## Roadmap
 
@@ -199,9 +202,9 @@ Edit `scan_roots` and `installer_roots` in `settings.yaml`. Be aware that adding
 If it saved you some time:
 
 - ⭐ Star it so more people find it
-- 🐛 [Open an issue](https://github.com/OWNER/DevCleaner/issues) for bugs or new categories
+- 🐛 [Open an issue](https://github.com/matou1118/DevCleaner/issues) for bugs or new categories
 - 💬 Share it with anyone else annoyed by installer files and temp clutter
-- 💰 [GitHub Sponsors](https://github.com/sponsors/OWNER) to support maintenance
+- 💰 [GitHub Sponsors](https://github.com/sponsors/matou1118) to support maintenance
 
 **Donations aren't needed right now.** The author built this on their own machine, wrote down the reasoning in the [decision log](CHANGELOG.md), and it started as a personal itch. If it helped you, a star or a piece of feedback is worth more than money.
 

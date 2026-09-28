@@ -4,7 +4,9 @@ DevCleaner - 本地独立清理工具
 """
 __version__ = "0.1.0"
 APP_NAME = "DevCleaner"
-USER_AGENT = f"{APP_NAME}/{__version__} (+https://github.com/)"
+REPO_OWNER = "matou1118"
+REPO_NAME = "DevCleaner"
+REPO = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
 import ctypes
 import fnmatch
 import json

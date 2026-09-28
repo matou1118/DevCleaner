@@ -8,7 +8,7 @@
 
 ## Reporting a vulnerability
 
-**Do not open a public issue.** Use GitHub's [private vulnerability reporting](https://github.com/OWNER/DevCleaner/security/advisories/new) (Security → Report a vulnerability).
+**Do not open a public issue.** Use GitHub's [private vulnerability reporting](https://github.com/matou1118/DevCleaner/security/advisories/new) (Security → Report a vulnerability).
 
 I'll confirm receipt within 48 hours and give a remediation timeline after assessing it.
 

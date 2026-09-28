@@ -19,7 +19,7 @@
 
 ```bash
 pip install -r requirements.txt
-python test_app.py        # 29 项自检，约 40 秒
+python test_app.py        # 35 项自检，约 50 秒
 python gui.py             # 本地试
 build.bat                 # 打包成 dist\DevCleaner.exe
 ```

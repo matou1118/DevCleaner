@@ -2,16 +2,19 @@
 
 Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离线可用，不依赖浏览器、Node、Java 或任何外部运行时**。
 
-[![CI](https://github.com/OWNER/DevCleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/DevCleaner/actions/workflows/ci.yml)
+[![CI](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/matou1118/DevCleaner/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://learn.microsoft.com/windows/)
 
-**当前版本 v0.1.0** · [English](README.en.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
+**当前版本 v0.1.0** · [English](README.en.md) · [📖 使用说明](docs/usage.md) · [📷 全部截图](docs/Screenshots.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
 
 打开即自动扫描。分类默认全部折叠，一屏就能看完所有分类和它们的大小；要细看某一项再展开，或点「全部展开」。
 
-![主界面](docs/screenshot-dark.png)
+![主界面](docs/01-overview.png)
+
+> 📷 [更多截图](docs/Screenshots.md)：展开态、确认弹窗、注册表区、六套主题
+> 📖 [完整使用说明](docs/usage.md)：配置项逐条解释、故障排查、设计取舍
 
 ## 它能干什么
 
@@ -66,7 +69,7 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 
 ## 安装
 
-下载 [Releases](https://github.com/OWNER/DevCleaner/releases) 里的 `DevCleaner.exe`，双击即可。打开即自动开始扫描，关闭即退出。
+下载 [Releases](https://github.com/matou1118/DevCleaner/releases) 里的 `DevCleaner.exe`，双击即可。打开即自动开始扫描，关闭即退出。
 
 需要 Python 3.10+ 才能从源码运行或重新打包。
 
@@ -80,7 +83,7 @@ python app.py                # 无界面：跑一次扫描并打印结果
 python app.py --json         # JSON 输出（给脚本用）
 python app.py -c "注册表"     # 只跑某一类
 python gui.py                # 原生界面
-python test_app.py           # 29 项自检
+python test_app.py           # 35 项自检
 build.bat                    # 自检 -> 清理 -> PyInstaller onefile -> 复制 settings.yaml
 ```
 
@@ -139,7 +142,7 @@ extra_junk: []                 # 追加传统垃圾目录
 
 测试里有一项专门量这个，每套主题 7 组对比度都必须达标（正文 ≥ 4.5:1，三级文字和警示色 ≥ 3:1）。
 
-![主题](docs/screenshot-themes.png)
+![主题](docs/themes/ink.png)
 
 ## 加一个扫描器
 
@@ -156,7 +159,7 @@ class MyScanner(Scanner):
 
 `Item.unit` 填 `"count"` 时，界面按**条目数**而非字节显示，且不参与 `min_size_bytes` 过滤。
 
-![注册表](docs/screenshot-registry.png)
+![注册表](docs/04-registry.png)
 
 ## 路线图
 
@@ -199,9 +202,9 @@ Temp 里的东西全部在 7 天内，其中 121 MB 是正在运行的 PyInstall
 如果它省了你的时间：
 
 - ⭐ Star 一下，让更多人看到
-- 🐛 [提 Issue 报 bug 或要新分类](https://github.com/OWNER/DevCleaner/issues)
+- 🐛 [提 Issue 报 bug 或要新分类](https://github.com/matou1118/DevCleaner/issues)
 - 💬 分享给同样被安装包和临时文件烦到的人
-- 💰 [GitHub Sponsors](https://github.com/sponsors/OWNER) 支持维护
+- 💰 [GitHub Sponsors](https://github.com/sponsors/matou1118) 支持维护
 
 **目前不需要捐款。** 作者是用自己的机器踩坑、把过程写进 [决策记录](CHANGELOG.md#决策记录) 的，本来就是为了省自己的事。如果它帮到你了，一个 Star 或一条反馈比打赏更有用。
 

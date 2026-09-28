@@ -1,4 +1,5 @@
 """DevCleaner 自检 —— python test_app.py 应输出 ALL OK"""
+import re
 import shutil
 import sys
 import tempfile
@@ -581,6 +582,7 @@ def t_cards_collapsed_by_default():
     w = gui.MainWindow()
     w._render()
     assert w.cards, "没有渲染出分类卡片"
+    assert w.placeholder.isHidden(), "有内容时占位文字必须藏起来"
     assert all(not c.expanded() for c in w.cards), "默认应该全部折叠"
     assert all(c.body.isHidden() for c in w.cards), "折叠态下 body 应为显式隐藏"
     w._set_all_expanded(True)
@@ -659,9 +661,161 @@ def t_oss_scaffolding():
         assert " #" not in s, f".gitattributes 第 {ln!r} 行有行尾注释：" \
                              f"git 只认行首 #，会把 # 当属性名"
     assert "eol=crlf" in ga and "*.bat" in ga, ".bat 应该设为 crlf（cmd 读 LF 不可靠）"
+
+
+def t_no_internal_protocol_leak():
+    """内部协议串（REG: / BULK:）绝不能出现在任何显示给用户的文本里。
+    之前在条目行和确认弹窗里都直接露过 `REG:mru:` 这种东西。
+
+    自己造 REG:/BULK: 条目，不依赖前面测试留下的 STATE —— 那些是
+    临时目录的产物，和这里的行对不上。"""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    import gui
+
+    real_items = list(app.STATE.items)
+    try:
+        app.STATE.items[:] = [
+            app.Item("注册表组", "注册表 · 可安全重置", "REG:mru:", 12, "safe",
+                     unit="count"),
+            app.Item("失效程序", "注册表 · 失效程序",
+                     r"REG:delkey:HKLM\SOFTWARE\X\{1}", 3, "caution",
+                     unit="count"),
+            app.Item("失效启动项", "注册表 · 失效程序",
+                     r"REG:delvalue:HKCU\Software\Microsoft\Windows\CurrentVersion\Run\X",
+                     1, "caution", unit="count"),
+            app.Item("空文件堆", "空文件 / 空目录 / 断链", "BULK:empty", 99,
+                     "caution", unit="count"),
+            app.Item("普通目录", "传统垃圾文件", r"C:\some\cache", 2048, "safe"),
+        ]
+        app.BULK["empty"] = {"files": [r"C:\a\1", r"C:\a\2"], "dirs": [], "links": []}
+        qa = QApplication.instance() or QApplication([])
+        w = gui.MainWindow()
+        w._render()
+
+        from PySide6.QtWidgets import QWidget
+        leaked = []
+
+        def walk(wid):
+            if wid is None:
+                return
+            for child in wid.children():
+                if not isinstance(child, QWidget):
+                    continue
+                t = child.text() if hasattr(child, "text") else None
+                if isinstance(t, str) and ("REG:" in t or "BULK:" in t):
+                    leaked.append(f"{type(child).__name__}: {t[:70]}")
+                walk(child)
+        walk(w)
+        assert not leaked, "界面上出现了内部协议串:\n  " + "\n  ".join(leaked)
+
+        # 逐条核对渲染函数
+        for it in app.STATE.items:
+            shown = gui._human_path(it)
+            assert not shown.startswith(("REG:", "BULK:")), shown
+            if it.path.startswith("BULK:"):
+                assert "逐条删除" in shown, shown
+            if it.path == "REG:mru:":
+                assert "使用记录" in shown, shown
+            if it.path.startswith("REG:delkey:") or it.path.startswith("REG:delvalue:"):
+                assert it.path[4:].split(":", 1)[1] == shown, shown
+        w.close()
+    finally:
+        app.STATE.items[:] = real_items
+        app.BULK.pop("empty", None)
+
+
+# ---------------- 仓库链接 ----------------
+def t_no_placeholder_left():
+    """OWNER / TODO / FIXME / example.com 之类占位符漏一个就是坏链接"""
+    root = Path(__file__).parent
+    # 本文件自身含这些字面量（就是这个测试的检查清单），跳过
+    skip = {".git", "build", "dist", "__pycache__", ".superpowers",
+            "docs/palette-directions.html", "test_app.py"}
+    bad = []
+    for p in root.rglob("*"):
+        if not p.is_file() or p.suffix.lower() in (".png", ".jpg", ".exe", ".reg"):
+            continue
+        rel = p.relative_to(root).as_posix()
+        if any(s in rel for s in skip):
+            continue
+        try:
+            txt = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for i, ln in enumerate(txt.splitlines(), 1):
+            for pat in ("github.com/OWNER", "sponsors/OWNER", "OWNER/DevCleaner",
+                        "TODO", "FIXME", "yourname", "your-project", "待填", "XXX"):
+                if pat in ln:
+                    bad.append(f"{rel}:{i} 含占位符 {pat!r}")
+    assert not bad, "有占位符没替换:\n  " + "\n  ".join(bad)
+
+
+def t_repo_links_consistent():
+    """仓库里所有指向本项目的链接，用户名与项目名必须一致"""
+    root = Path(__file__).parent
+    urls = set()
+    for p in root.rglob("*"):
+        if not p.is_file() or p.suffix.lower() in (".png", ".jpg", ".exe", ".reg"):
+            continue
+        if ".git" in p.parts or "build" in p.parts or "dist" in p.parts:
+            continue
+        try:
+            txt = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for m in re.findall(r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)", txt):
+            if m[1] == "DevCleaner":
+                urls.add(m)
+    assert urls, "README 里应该有指向本仓库的链接"
+    owners = {o for o, _ in urls}
+    assert len(owners) == 1, f"仓库链接的用户名不一致: {owners}"
+    assert owners == {app.REPO_OWNER}, \
+        f"链接用户名 {owners} 与 app.REPO_OWNER ({app.REPO_OWNER}) 不一致"
+    assert all(r == app.REPO_NAME for _, r in urls), \
+        f"链接项目名 {[r for _, r in urls]} 与 app.REPO_NAME ({app.REPO_NAME}) 不一致"
+    # Sponsors 链接
+    fu = (root / ".github/FUNDING.yml").read_text(encoding="utf-8")
+    assert f"github: [{app.REPO_OWNER}]" in fu, \
+        f"FUNDING.yml 的用户名与 app.REPO_OWNER 不一致: {app.REPO_OWNER}"
     # 英文版不能是占位符
     en = (root / "README.en.md").read_text(encoding="utf-8")
     assert len(en) > 2000, "README.en.md 太短，可能是占位符"
+    # 本地图片引用必须真实存在（远程 URL 不检查）
+    import re as _re
+    bad_img = []
+    for p in list(root.glob("*.md")) + list((root / "docs").glob("*.md")):
+        txt = p.read_text(encoding="utf-8")
+        for m in _re.findall(r"!\[[^\]]*\]\(([^)\s]+)", txt):
+            if m.startswith(("http://", "https://")):
+                continue
+            base = root if p.parent == root else p.parent
+            if not (base / m).is_file():
+                bad_img.append(f"{p.name} -> {m}")
+    assert not bad_img, "图片引用失效:\n  " + "\n  ".join(bad_img)
+
+
+# ---------------- 文档 ----------------
+def t_docs_present():
+    """说明文件齐全，且不是空壳"""
+    root = Path(__file__).parent
+    need = ["docs/usage.md", "docs/usage.en.md", "docs/Screenshots.md",
+            "docs/01-overview.png", "docs/02-expanded.png", "docs/03-confirm.png",
+            "docs/04-registry.png"]
+    missing = [n for n in need if not (root / n).is_file()]
+    assert not missing, f"缺这些文档/截图: {missing}"
+    for n in ("docs/usage.md", "docs/usage.en.md", "docs/Screenshots.md"):
+        sz = (root / n).stat().st_size
+        assert sz > 1500, f"{n} 只有 {sz} 字节，可能是占位符"
+    for t in ("docs/themes", ):
+        pngs = sorted((root / t).glob("*.png"))
+        assert len(pngs) == 6, f"{t} 应有 6 套主题截图，实际 {len(pngs)}"
+    # 六个主题每个都该有对应截图
+    for name in app.THEME_ORDER:
+        slug = name.lower().replace(" ", "-").replace("é", "e")
+        assert (root / "docs" / "themes" / (slug + ".png")).is_file(), \
+            f"主题 {name} 缺截图"
 
 
 # ---------------- 界面能在离屏模式下构建 ----------------
@@ -742,6 +896,10 @@ if __name__ == "__main__":
         check("真实环境只读冒烟", t_smoke)
         check("版本号语义化+变更日志同步", t_version_semver_and_changelog)
         check("开源常备文件齐全", t_oss_scaffolding)
+        check("无占位符残留", t_no_placeholder_left)
+        check("仓库链接用户名一致", t_repo_links_consistent)
+        check("内部协议串不外泄", t_no_internal_protocol_leak)
+        check("说明文件齐全", t_docs_present)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

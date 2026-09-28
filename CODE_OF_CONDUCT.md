@@ -34,7 +34,7 @@
 
 ## 报告
 
-如果你看到或经历可能被视作违反本准则的行为，请通过 [私密漏洞报告](https://github.com/OWNER/DevCleaner/security/advisories/new) 联系维护者。所有投诉都将被审查和调查，必要时将保密处理。
+如果你看到或经历可能被视作违反本准则的行为，请通过 [私密漏洞报告](https://github.com/matou1118/DevCleaner/security/advisories/new) 联系维护者。所有投诉都将被审查和调查，必要时将保密处理。
 
 ## 归属
 

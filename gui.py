@@ -122,6 +122,20 @@ QScrollBar::add-page, QScrollBar::sub-page {{ background:transparent; }}
 """
 
 
+def _human_path(it) -> str:
+    """显示给人看的路径/位置。内部协议串（REG: / BULK:）绝不能露给用户。"""
+    p = getattr(it, "path", "")
+    if p.startswith("REG:"):
+        op, _, arg = p[4:].partition(":")
+        if op == "mru":
+            return r"HKCU 下 10 个「资源管理器使用记录」键"
+        return arg or p
+    if p.startswith("BULK:"):
+        n = len(engine.expand_bulk(p))
+        return f"扫描根目录下匹配的 {n} 个空文件 / 空目录 / 断链（逐条删除）"
+    return p
+
+
 def _lbl(text: str, obj: str = "", parent: Optional[QWidget] = None) -> QLabel:
     w = QLabel(text, parent)
     if obj:
@@ -178,7 +192,7 @@ class ItemRow(QFrame):
         b.setContentsMargins(0, 0, 0, 0)
         b.setSpacing(2)
         b.addWidget(_lbl(getattr(it, "name", "—"), "itemName"))
-        b.addWidget(_lbl(it.path, "itemPath"))
+        b.addWidget(_lbl(_human_path(it), "itemPath"))
         if it.meta:
             b.addWidget(_lbl(it.meta, "itemMeta"))
         if getattr(it, "note", ""):
@@ -484,7 +498,7 @@ class MainWindow(QMainWindow):
         self.pick.clear()
         self._clear_cards()
         self.placeholder.setText("正在扫描…")
-        self.placeholder.show()
+        self.placeholder.show()            # 扫描中必须可见
         self.btn_scan.setEnabled(False)
         self.btn_scan.setText("扫描中…")
         self.btn_expand.setEnabled(False)
@@ -512,7 +526,6 @@ class MainWindow(QMainWindow):
         self.btn_scan.setEnabled(True)
         self.btn_scan.setText("重新扫描")
         self.btn_expand.setEnabled(True)
-        self.placeholder.hide()
         self.stage.setText(f"完成 · {engine.STATE.finished_at}")
         self.prog.setRange(0, 100)
         self.prog.setValue(100)
@@ -533,6 +546,10 @@ class MainWindow(QMainWindow):
 
     def _render(self) -> None:
         self._clear_cards()
+        # 占位文字由 _render 自己管。之前只在 _on_done 里 hide()，
+        # 任何别的路径调 _render（比如重新渲染）都会留下一句
+        # "点击开始扫描"压在真实内容上面。
+        self.placeholder.setVisible(not engine.STATE.items and not engine.STATE.notes)
         groups: dict = {}
         for it in engine.STATE.items:
             groups.setdefault(it.category, []).append(it)
@@ -636,7 +653,8 @@ class MainWindow(QMainWindow):
             return
         risky = [i for i in sel if i.risk == "caution"]
         regs = [i for i in sel if i.path.startswith("REG:")]
-        lines = "\n".join(f"· {i.name}  {fmt(i)}\n  {i.path}" for i in sel[:40])
+        lines = "\n".join(f"· {i.name}  {fmt(i)}\n  {_human_path(i)}"
+                          for i in sel[:40])
         if len(sel) > 40:
             lines += f"\n… 另有 {len(sel) - 40} 项"
         msg = QMessageBox(self)
@@ -659,6 +677,10 @@ class MainWindow(QMainWindow):
         if risky:
             msg.setStandardButtons(QMessageBox.StandardButton.Cancel
                                    | QMessageBox.StandardButton.Ok)
+            msg.setText(msg.text() +
+                        f"\n\n⚠ 其中 {len(risky)} 项标记为「需确认」：\n"
+                        + "\n".join("· " + i.name for i in risky[:8])
+                        + ("\n… 另有 " + str(len(risky) - 8) + " 项" if len(risky) > 8 else ""))
             ok = msg.exec()
         else:
             ok = msg.exec() == QMessageBox.StandardButton.Ok
