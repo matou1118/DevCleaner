@@ -1,0 +1,26 @@
+# 统一换行符：仓库里一律 LF，检出到 Windows 时转 CRLF。
+# 没有这个文件，git 会每次提交都警告 "LF will be replaced by CRLF"，
+# 而且 .reg / .png 这类二进制文件会被误当文本处理。
+#
+# 注意：.gitattributes 只认行首的 #，行尾 # 不是注释。
+# 要给某行加说明，单独起一行放在它上面。
+
+* text=auto eol=lf
+
+*.py    text eol=lf diff=python
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.txt   text eol=lf
+*.spec  text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+.editorconfig  text eol=lf
+
+# .bat 必须是 CRLF：cmd 读 LF 的 .bat 不可靠
+*.bat   text eol=crlf
+
+*.png  binary
+*.jpg  binary
+*.exe  binary
+*.reg  binary

@@ -1,0 +1,44 @@
+name: 功能建议
+description: 新的扫描分类、配置项、界面能力
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你现在怎么解决的
+      description: 先说清你遇到的麻烦，以及目前绕开它的办法。这比直接提需求有用得多。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 想要什么
+      placeholder: 想让工具识别并清理 X
+    validations:
+      required: true
+
+  - type: textarea
+    id: criteria
+    attributes:
+      label: 判据
+      description: |
+        清理类需求请务必给出**能自动化验证的判据**，不要只给「看起来像垃圾」。
+
+        反例：删除 node_modules。
+        正例：删除满足以下全部条件的 node_modules —— 无 remote 仓库、
+        60 天未动、`git status --porcelain` 为空。
+
+        判据模糊的功能是本项目最大的风险来源：把在用项目当垃圾删掉的代价，
+        远大于少清了几百 MB 的收益。所以判据不清晰的请求通常会被要求补上。
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围估计
+      description: 这个数据在哪些机器上有？大概多少？
+      placeholder: 所有装了 VS Code 的开发机，单个 0.5-3 GB
+    validations:
+      required: false

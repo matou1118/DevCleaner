@@ -2,6 +2,13 @@
 
 Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离线可用，不依赖浏览器、Node、Java 或任何外部运行时**。
 
+[![CI](https://github.com/OWNER/DevCleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/DevCleaner/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://learn.microsoft.com/windows/)
+
+**当前版本 v0.1.0** · [English](README.en.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
+
 打开即自动扫描。分类默认全部折叠，一屏就能看完所有分类和它们的大小；要细看某一项再展开，或点「全部展开」。
 
 ![主界面](docs/screenshot-dark.png)
@@ -18,7 +25,7 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 | **更新器残留** | `*\@*-updater\pending\*`、`*\updates\executors\*` 等 | 1 项 / 87.2 MB |
 | **构建产物 / 开发垃圾** | `*.spec` 同级的 `build/`；`__pycache__`、`.pytest_cache`、`.ruff_cache` 等 | 6 项 / 248 MB |
 | **Python 环境与缓存** | `.venv`（有 `pyvenv.cfg` 才算）、pip 缓存、以及你在配置里加的任何目录 | 5 项 / 182 MB |
-| **注册表** | 卸载命令指向不存在 exe 的卸载项、指向不存在 exe 的启动项；以及可安全重置的 MRU 键 | 1 项 / 457 项 |
+| **注册表** | 卸载命令指向不存在 exe 的卸载项、指向不存在 exe 的启动项；以及可安全重置的 MRU 键 | 1 项 / 466 项 |
 | **空文件 / 空目录 / 断链** | 0 字节项，**自动跳过 `.gitkeep` / `*.lock` / `desktop.ini` / `Thumbs.db` 等** | 1 项 / 4369 项 |
 
 ### ⚠️ 三件必须说清楚的事
@@ -34,7 +41,6 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 早期版本还额外要求 `InstallLocation` 指向的目录不存在，结果**误报了一大片** —— 微信和 Visual Studio Installer 的 `Uninstall.exe` 明明还在，只是 `InstallLocation` 指向了旧路径。删掉活程序的卸载项 = 以后再也卸不掉它，代价远大于清掉几个 KB 的收益。
 
 现在这类程序一律不报。测试里有两个用例专门盯这条：一个「卸载命令有效 + InstallLocation 失效」必须**不**被报，一个「卸载命令失效」必须**被**报出来。
-
 
 ## 安全模型
 
@@ -60,7 +66,7 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 
 ## 安装
 
-下载 `DevCleaner.exe` 双击即可。打开即自动开始扫描，关闭即退出。
+下载 [Releases](https://github.com/OWNER/DevCleaner/releases) 里的 `DevCleaner.exe`，双击即可。打开即自动开始扫描，关闭即退出。
 
 需要 Python 3.10+ 才能从源码运行或重新打包。
 
@@ -69,10 +75,13 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 ```bash
 pip install -r requirements.txt
 
-python app.py       # 无界面：跑一次扫描并打印结果（调试用）
-python gui.py       # 原生界面
-python test_app.py  # 29 项自检，含离屏构建界面 + 注册表备份还原往返
-build.bat           # 自检 -> 清理 -> PyInstaller onefile -> 复制 settings.yaml
+python app.py --version     # 0.1.0
+python app.py                # 无界面：跑一次扫描并打印结果
+python app.py --json         # JSON 输出（给脚本用）
+python app.py -c "注册表"     # 只跑某一类
+python gui.py                # 原生界面
+python test_app.py           # 29 项自检
+build.bat                    # 自检 -> 清理 -> PyInstaller onefile -> 复制 settings.yaml
 ```
 
 ## 配置
@@ -80,6 +89,8 @@ build.bat           # 自检 -> 清理 -> PyInstaller onefile -> 复制 settings
 `settings.yaml` 放在 exe 同目录（找不到就用包内内置副本），**改完重启程序生效，不用重新打包**。
 
 ```yaml
+theme: "Ink"                # 上次选的主题
+
 scan_roots:                    # 需要递归遍历的根（.venv / Git / 构建产物）
   - "%USERPROFILE%"
 
@@ -147,6 +158,33 @@ class MyScanner(Scanner):
 
 ![注册表](docs/screenshot-registry.png)
 
+## 路线图
+
+见 [CHANGELOG.md](CHANGELOG.md#未发布) 的「计划中」。优先级最高的：
+
+- 按需只扫描选中的分类（现在是全盘扫一遍）
+- 扫描结果导出为报告文件
+- 界面文案 i18n（目前硬编码中文）
+
+欢迎提 Issue 认领其中一条。
+
+## 常见问题
+
+**Q：会删掉我的项目源码吗？**
+Git 仓库默认**只读**，不提供删除。只有同时满足「无远程仓库 + 60 天未动 + 无未提交改动」才进可删列表。
+
+**Q：误删了怎么恢复？**
+文件全部进回收站，正常还原。注册表备份在 `%LOCALAPPDATA%\DevCleaner\registry_backups\`，用 `reg import` 还原。
+
+**Q：为什么只扫到 2 GB，明明 Temp 有 770 MB？**
+Temp 里的东西全部在 7 天内，其中 121 MB 是正在运行的 PyInstaller 解包目录。按天龄过滤收益≈0 还会误删，所以默认跳过。
+
+**Q：注册表清理才 15 KB，值得做吗？**
+它的价值不是省空间，是清掉指向已不存在程序的死引用。界面按条目数显示，不拿字节数糊弄你。
+
+**Q：能扫别的盘吗？**
+改 `settings.yaml` 的 `scan_roots` 和 `installer_roots`。注意递归扫描的根加多了会明显变慢。
+
 ## 已知限制
 
 - 需要管理员权限才能删 `HKLM` 下的键（系统级卸载项、`Run` 分支）。普通用户运行会看到「权限不足」，这是预期行为。
@@ -154,8 +192,19 @@ class MyScanner(Scanner):
 - 注册表扫描固定只看 `HKCU` 的 10 个 MRU 键和三个 `Uninstall`/`Run` 分支。刻意不去遍历 `HKCR\CLSID` 之类的地方 —— 那里的误删代价是系统装不上程序。
 - 扫描耗时随磁盘和文件数增长，本机 24 盘约 25 秒（其中空文件/空目录那一项要全量遍历，占 11 秒）。
 - 批量空文件项是聚合成一行的（4000 多行没法看），清理时会展开成逐条删除。
-- 没有多语言。界面文案硬编码中文。
+- 界面文案硬编码中文。
+
+## 支持这个项目
+
+如果它省了你的时间：
+
+- ⭐ Star 一下，让更多人看到
+- 🐛 [提 Issue 报 bug 或要新分类](https://github.com/OWNER/DevCleaner/issues)
+- 💬 分享给同样被安装包和临时文件烦到的人
+- 💰 [GitHub Sponsors](https://github.com/sponsors/OWNER) 支持维护
+
+**目前不需要捐款。** 作者是用自己的机器踩坑、把过程写进 [决策记录](CHANGELOG.md#决策记录) 的，本来就是为了省自己的事。如果它帮到你了，一个 Star 或一条反馈比打赏更有用。
 
 ## License
 
-MIT
+[MIT](LICENSE) © DevCleaner contributors

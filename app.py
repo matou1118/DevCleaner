@@ -2,6 +2,9 @@
 DevCleaner - 本地独立清理工具
 扫描引擎：纯标准库 + psutil + PyYAML，不含任何界面代码（界面见 gui.py）。
 """
+__version__ = "0.1.0"
+APP_NAME = "DevCleaner"
+USER_AGENT = f"{APP_NAME}/{__version__} (+https://github.com/)"
 import ctypes
 import fnmatch
 import json
@@ -1666,11 +1669,49 @@ def run_scan(on_progress: Optional[Callable[[str, float], None]] = None) -> None
 
 
 if __name__ == "__main__":
-    # 调试入口：python app.py —— 跑一次扫描并打印结果
-    import sys
-    print(f"配置: {resource('settings.yaml')}")
+    import argparse
+
+    _ap = argparse.ArgumentParser(
+        prog=APP_NAME, description="本地清理工具的扫描引擎（无界面）")
+    _ap.add_argument("--version", "-V", action="version",
+                     version=f"{APP_NAME} {__version__}")
+    _ap.add_argument("--json", action="store_true", help="以 JSON 输出结果")
+    _ap.add_argument("--category", "-c", help="只跑某个分类（含关键词即可）")
+    _ap.add_argument("--min-age", type=int, help="覆盖 settings.yaml 里的天龄阈值")
+    _ap.add_argument("--json-indent", type=int, default=2, help="JSON 缩进")
+    _a = _ap.parse_args()
+
+    print(f"{APP_NAME} {__version__}  配置: {resource('settings.yaml')}")
+    if _a.min_age is not None:
+        CFG["temp_min_age_days"] = _a.min_age
+        CFG["min_installer_age_days"] = _a.min_age
     print(f"扫描根: {CFG['scan_roots']}\n")
-    run_scan(on_progress=lambda s, p: print(f"  [{p * 100:5.1f}%] {s}"))
+
+    if _a.category:
+        keep = [s for s in SCANNERS if _a.category in s.category]
+        if not keep:
+            print(f"没有匹配 '{_a.category}' 的分类。可选：")
+            for s in SCANNERS:
+                print("  " + s.category)
+            sys.exit(2)
+        SCANNERS[:] = keep
+    run_scan()
+
+    if _a.json:
+        import json as _json
+        print(_json.dumps({
+            "version": __version__,
+            "log": STATE.log,
+            "items": [
+                {"name": i.name, "category": i.category, "path": i.path,
+                 "size": i.size, "unit": i.unit, "risk": i.risk}
+                for i in STATE.items],
+            "notes": [
+                {"name": n.name, "kind": n.kind, "path": n.path, "size": n.size}
+                for n in STATE.notes],
+        }, ensure_ascii=False, indent=_a.json_indent))
+        sys.exit(0)
+
     print()
     for line in STATE.log:
         print("  " + line)

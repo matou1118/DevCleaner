@@ -347,7 +347,7 @@ class ScanThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("DevCleaner · 本地清理")
+        self.setWindowTitle(f"{engine.APP_NAME} {engine.__version__} · 本地清理")
         self.resize(1180, 900)
         self.setMinimumSize(880, 620)
         self.pick: set = set()
@@ -444,6 +444,9 @@ class MainWindow(QMainWindow):
         fl.setSpacing(10)
         self.foot = _lbl("已选 0 项 · 0 B", "footText")
         fl.addWidget(self.foot)
+        self.ver = _lbl(f"v{engine.__version__}", "catHint")
+        self.ver.setToolTip("DevCleaner · MIT License")
+        fl.addWidget(self.ver)
         fl.addStretch(1)
         b_all = QPushButton("全选安全项")
         b_all.clicked.connect(lambda: self.bulk(True))
@@ -710,8 +713,16 @@ class MainWindow(QMainWindow):
 
 
 def main() -> int:
+    if "--version" in sys.argv or "-V" in sys.argv:
+        print(f"{engine.APP_NAME} {engine.__version__}")
+        return 0
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(__doc__ or "")
+        return 0
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
     qa = QApplication(sys.argv)
+    qa.setApplicationName(engine.APP_NAME)
+    qa.setApplicationVersion(engine.__version__)
     qa.setStyle("Fusion")
     qa.setFont(QFont("Microsoft YaHei UI", 9))
     w = MainWindow()

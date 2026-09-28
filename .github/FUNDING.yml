@@ -1,0 +1,12 @@
+# 打赏配置
+# 把下面 username 换成你的 GitHub 用户名，GitHub 就会在仓库右上角显示 Sponsor 按钮。
+# 想支持其它方式（爱发电 / 支付宝 / 微信）也加在这里。
+#
+# 现状：README 里写的是「目前不需要捐款」。如果哪天想开了，
+# 填好这里、把 README 的措辞改掉、再在 CHANGELOG 记一笔。
+
+github: [OWNER]
+# patreon: yourname
+# open_collective: yourproject
+# ko_fi: yourname
+# custom: ["https://example.com/donate"]

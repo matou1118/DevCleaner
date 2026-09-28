@@ -610,6 +610,60 @@ def t_expand_button_click():
     w.close()
 
 
+# ---------------- 版本号 ----------------
+def t_version_semver_and_changelog():
+    """版本号语义化，且 CHANGELOG 里有对应条目 —— CI 也查这一条"""
+    import re
+    v = app.__version__
+    assert re.fullmatch(r"\d+\.\d+\.\d+", v), f"版本号不是 语义化版本: {v}"
+    assert app.APP_NAME == "DevCleaner", app.APP_NAME
+    p = Path(__file__).parent / "CHANGELOG.md"
+    assert p.is_file(), "缺 CHANGELOG.md"
+    log = p.read_text(encoding="utf-8")
+    assert f"## [{v}]" in log, f"CHANGELOG.md 里没有 v{v} 的条目"
+    assert "更新日志" in log or "Changelog" in log
+    # README 里引用的版本要跟引擎一致
+    for rd in ("README.md", "README.en.md"):
+        rp = Path(__file__).parent / rd
+        assert rp.is_file(), f"缺 {rd}"
+        assert v in rp.read_text(encoding="utf-8"), f"{rd} 里没提到 v{v}"
+
+
+def t_oss_scaffolding():
+    """开源常备文件齐不齐 —— 少一个都不该合"""
+    root = Path(__file__).parent
+    need = [
+        "LICENSE", "README.md", "README.en.md", "CHANGELOG.md",
+        "CONTRIBUTING.md", "CONTRIBUTING.en.md",
+        "SECURITY.md", "SECURITY.en.md", "CODE_OF_CONDUCT.md",
+        "requirements.txt", "build.bat", "DevCleaner.spec",
+        ".gitignore", ".gitattributes", ".editorconfig",
+        ".github/workflows/ci.yml",
+        ".github/ISSUE_TEMPLATE/bug_report.yml",
+        ".github/ISSUE_TEMPLATE/feature_request.yml",
+        ".github/FUNDING.yml",
+        "docs/palette-directions.html",
+    ]
+    missing = [n for n in need if not (root / n).is_file()]
+    assert not missing, f"缺这些文件: {missing}"
+    # 打包产物不该进仓库
+    for junk in ("build", "dist", "__pycache__"):
+        assert junk in (root / ".gitignore").read_text(encoding="utf-8"), \
+            f".gitignore 没忽略 {junk}/"
+    # .gitattributes 只认行首的 #，行尾 # 会被当成属性名，git 会直接报错
+    ga = (root / ".gitattributes").read_text(encoding="utf-8")
+    for ln in ga.splitlines():
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        assert " #" not in s, f".gitattributes 第 {ln!r} 行有行尾注释：" \
+                             f"git 只认行首 #，会把 # 当属性名"
+    assert "eol=crlf" in ga and "*.bat" in ga, ".bat 应该设为 crlf（cmd 读 LF 不可靠）"
+    # 英文版不能是占位符
+    en = (root / "README.en.md").read_text(encoding="utf-8")
+    assert len(en) > 2000, "README.en.md 太短，可能是占位符"
+
+
 # ---------------- 界面能在离屏模式下构建 ----------------
 def t_gui_offscreen():
     import os
@@ -686,6 +740,8 @@ if __name__ == "__main__":
         check("clone 保护(有remote不删)", lambda: t_clone_guard(tmp))
         check("界面构建+主题切换(离屏)", t_gui_offscreen)
         check("真实环境只读冒烟", t_smoke)
+        check("版本号语义化+变更日志同步", t_version_semver_and_changelog)
+        check("开源常备文件齐全", t_oss_scaffolding)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

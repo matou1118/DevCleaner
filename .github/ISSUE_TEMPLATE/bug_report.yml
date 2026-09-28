@@ -1,0 +1,93 @@
+name: Bug 报告
+description: 清理结果不对、误判、闪动、崩溃
+labels: ["bug", "需要复现"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先谢谢你愿意报 bug。
+
+        **清理类工具的 bug 报告，判据比现象更重要。** 如果是「没扫出来」或「误判」，
+        请用下面的模板；如果是界面卡顿/闪动，请务必附上录屏或抓帧。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 实际发生了什么
+      description: 期望是什么也写上，两者的差距就是 bug。
+      placeholder: |
+        例：Downloads 里的 CodeArts-0.1.26-x64-prod.exe（227 MB）没被列为可清理，
+        但该程序已经装在 %LOCALAPPDATA%\Programs\CodeArts 下。
+    validations:
+      required: true
+
+  - type: textarea
+    id: scanner
+    attributes:
+      label: 属于哪一类
+      options:
+        - 没扫出来（漏报）
+        - 误判（不该出现却出现）
+        - 删除失败 / 删错了
+        - 界面卡顿、闪动、布局错乱
+        - 崩溃或闪退
+        - 主题 / 配色显示不对
+        - 其它
+    validations:
+      required: true
+
+  - type: input
+    id: path
+    attributes:
+      label: 相关路径
+      description: 涉及清理的完整路径。这决定了能不能复现，请不要打码。
+      placeholder: D:\HuaweiMoveData\Users\Administrator\Documents\Downloads\xxx.exe
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: settings.yaml 相关片段
+      description: 只贴与该问题相关的键（scan_roots / exclude_* / installed_aliases 等）。
+      render: yaml
+
+  - type: input
+    id: win
+    attributes:
+      label: Windows 版本
+      placeholder: Windows 11 24H2 (22631)
+    validations:
+      required: true
+
+  - type: input
+    id: py
+    attributes:
+      label: DevCleaner 版本
+      description: 界面右下角或标题栏上的 v0.x.x
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: 用的是 exe 还是源码
+      options: [下载的 exe, 源码运行 gui.py, 源码运行 app.py]
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: 日志
+      description: 界面右下角「日志」按钮里的内容。
+      render: text
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 清理类 bug 请先确认
+      options:
+        - label: 我已确认报的是判据问题，不是我自己配错了 exclude 规则
+          required: true
