@@ -86,3 +86,5 @@ scan_options:
   max_recursion_depth: 10
   skip_dirs_with_access_error: true
   min_size_bytes: 2097152            # 2 MB，低于此不显示
+
+theme: "Tokyo Night"

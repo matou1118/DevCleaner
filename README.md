@@ -2,6 +2,8 @@
 
 Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离线可用，不依赖浏览器、Node、Java 或任何外部运行时**。
 
+打开即自动扫描。分类默认全部折叠，一屏就能看完所有分类和它们的大小；要细看某一项再展开，或点「全部展开」。
+
 ![主界面](docs/screenshot-dark.png)
 
 ## 它能干什么
@@ -69,7 +71,7 @@ pip install -r requirements.txt
 
 python app.py       # 无界面：跑一次扫描并打印结果（调试用）
 python gui.py       # 原生界面
-python test_app.py  # 22 项自检，含离屏构建界面 + 注册表备份还原往返
+python test_app.py  # 29 项自检，含离屏构建界面 + 注册表备份还原往返
 build.bat           # 自检 -> 清理 -> PyInstaller onefile -> 复制 settings.yaml
 ```
 
@@ -108,7 +110,23 @@ extra_junk: []                 # 追加传统垃圾目录
 
 ## 主题
 
-内置 6 套：暗夜 / 曜石 / 森林 / 绯 / 深海 / 素白。界面右上角实时切换，不需要重启。
+内置 6 套色板，来自 [`docs/palette-directions.html`](docs/palette-directions.html)（原始设计稿）：
+
+| 方向 | 深色 | 浅色 |
+|---|---|---|
+| **Studio** — Linear / Vercel / Raycast 那一脉 | Studio Dark | Studio Light |
+| **Editorial** — 杂志印刷质感，暖纸墨色 | Ink | Paper |
+| **Curated** — 社区成熟色板 | Tokyo Night | Rosé Pine |
+
+界面右上角实时切换，选择会写回 `settings.yaml` 的 `theme:` 键，重启仍是同一套。改色值请改设计稿或 `app.py` 里的 `_PALETTES`，其余字段会自动推导。
+
+### 推导出来的字段
+
+设计稿给了 7 个主色。次级/三级文字色、分割线亮度、强调色上的文字色都是**按 WCAG 公式算出来的**，不是手抄的 —— 这样你改主色时它们会跟着走。
+
+其中「强调色上的文字」取白字和底色字里对比度更高的一个。这复现了设计稿在 Studio / Paper / Rosé Pine / Tokyo Night 上的选择，唯一偏离是 **Ink**：设计稿用白字（3.3:1），这里改成底色字（5.3:1），因为 13px 粗体文字按 WCAG AA 要 4.5:1。
+
+测试里有一项专门量这个，每套主题 7 组对比度都必须达标（正文 ≥ 4.5:1，三级文字和警示色 ≥ 3:1）。
 
 ![主题](docs/screenshot-themes.png)
 

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>DevCleaner · 配色方向</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+    background: #0a0a0c; color: #e8e8ec; padding: 28px 36px; line-height: 1.5;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+  .sub { color: #8a8a92; font-size: 13px; margin-bottom: 28px; }
+  .dirs { display: flex; flex-direction: column; gap: 26px; }
+  .dir {
+    border: 1px solid #232328; border-radius: 14px; overflow: hidden;
+    background: #111114; cursor: pointer; transition: border-color .2s, transform .2s;
+  }
+  .dir:hover { border-color: #4a4a55; }
+  .dir.selected { border-color: #6e8cff; box-shadow: 0 0 0 1px #6e8cff; }
+  .dir-head { padding: 18px 22px 14px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #1d1d22; }
+  .dir-tag { font-size: 11px; font-weight: 600; color: #6e8cff; letter-spacing: 1.5px; }
+  .dir-name { font-size: 18px; font-weight: 600; }
+  .dir-desc { font-size: 12px; color: #8a8a92; margin-left: auto; max-width: 360px; text-align: right; }
+  .dir-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .theme-col { padding: 20px 22px; }
+  .theme-col + .theme-col { border-left: 1px solid #1d1d22; }
+  .t-label { font-size: 11px; font-weight: 600; letter-spacing: 1px; color: #6a6a72; margin-bottom: 12px; text-transform: uppercase; }
+
+  /* 色板 */
+  .swatches { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .sw { width: 38px; height: 38px; border-radius: 8px; border: 1px solid rgba(255,255,255,.08); position: relative; }
+  .sw span { position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%); font-size: 9px; color: #6a6a72; white-space: nowrap; font-family: Consolas, monospace; }
+  .swatches { margin-bottom: 24px; }
+
+  /* mockup 卡片 */
+  .mock { border-radius: 10px; padding: 14px 16px; font-size: 12px; }
+  .mock-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .mock-icon { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+  .mock-title { font-weight: 600; font-size: 13px; }
+  .mock-count { font-size: 10px; opacity: .55; }
+  .mock-size { margin-left: auto; font-weight: 600; font-size: 13px; }
+  .mock-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid; }
+  .mock-cb { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid; flex-shrink: 0; }
+  .mock-cb.on { border: none; }
+  .mock-row-name { font-weight: 600; font-size: 12px; }
+  .mock-row-path { font-size: 9px; opacity: .5; font-family: Consolas, monospace; }
+  .mock-row-size { margin-left: auto; font-weight: 600; font-size: 12px; }
+  .mock-badge { font-size: 9px; padding: 1px 6px; border-radius: 3px; }
+  .mock-btn { display: inline-block; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; margin-top: 10px; }
+
+  .pick { margin-top: 30px; text-align: center; }
+  .pick button { background: #6e8cff; color: white; border: none; padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .pick button:hover { background: #5a7dff; }
+  .hint { color: #6a6a72; font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>DevCleaner · 配色方向对比</h1>
+<p class="sub">三个「高级」方向，每个含一套深 + 一套浅。点选你喜欢的方向，或在终端告诉我。</p>
+
+<div class="dirs">
+
+  <!-- ============ A. Studio ============ -->
+  <div class="dir" data-choice="studio" onclick="toggleSelect(this)">
+    <div class="dir-head">
+      <span class="dir-tag">A</span>
+      <span class="dir-name">Studio · 现代 dev tool 质感</span>
+      <span class="dir-desc">Linear / Vercel / Raycast 那一脉。近黑底、克制的蓝紫强调色、极细分割线、柔和层次。冷静、专业、不喧哗。</span>
+    </div>
+    <div class="dir-body">
+      <!-- 深色 -->
+      <div class="theme-col">
+        <div class="t-label">Studio Dark</div>
+        <div class="swatches">
+          <div class="sw" style="background:#08090A"><span>bg</span></div>
+          <div class="sw" style="background:#0E0F11"><span>panel</span></div>
+          <div class="sw" style="background:#16171A"><span>panel2</span></div>
+          <div class="sw" style="background:#F7F8F8"><span>fg</span></div>
+          <div class="sw" style="background:#5E6AD2"><span>accent</span></div>
+          <div class="sw" style="background:#3FB950"><span>safe</span></div>
+          <div class="sw" style="background:#D29922"><span>caution</span></div>
+        </div>
+        <div class="mock" style="background:#0E0F11; color:#F7F8F8; border:1px solid #1E1F22;">
+          <div class="mock-head">
+            <div class="mock-icon" style="background:#5E6AD2; color:#fff;">●</div>
+            <span class="mock-title">Python 缓存</span>
+            <span class="mock-count">12 项 · 安全 9</span>
+            <span class="mock-size">2.4 GB</span>
+          </div>
+          <div class="mock-row" style="border-color:#1E1F22;">
+            <div class="mock-cb on" style="background:#5E6AD2;"></div>
+            <div><div class="mock-row-name">__pycache__</div><div class="mock-row-path">D:\proj\app\__pycache__</div></div>
+            <span class="mock-row-size">128 MB</span>
+            <span class="mock-badge" style="background:rgba(63,185,80,.15); color:#3FB950;">安全</span>
+          </div>
+          <div class="mock-row" style="border-color:#1E1F22;">
+            <div class="mock-cb" style="border-color:#3A3B40;"></div>
+            <div><div class="mock-row-name">.pytest_cache</div><div class="mock-row-path">D:\proj\.pytest_cache</div></div>
+            <span class="mock-row-size">4.2 MB</span>
+            <span class="mock-badge" style="background:rgba(210,153,34,.15); color:#D29922;">需确认</span>
+          </div>
+          <div class="mock-btn" style="background:#5E6AD2; color:#fff;">移入回收站</div>
+        </div>
+      </div>
+      <!-- 浅色 -->
+      <div class="theme-col">
+        <div class="t-label">Studio Light</div>
+        <div class="swatches">
+          <div class="sw" style="background:#FBFBFA"><span>bg</span></div>
+          <div class="sw" style="background:#FFFFFF"><span>panel</span></div>
+          <div class="sw" style="background:#F4F4F2"><span>panel2</span></div>
+          <div class="sw" style="background:#1A1A1A"><span>fg</span></div>
+          <div class="sw" style="background:#5E6AD2"><span>accent</span></div>
+          <div class="sw" style="background:#1A7F37"><span>safe</span></div>
+          <div class="sw" style="background:#9A6700"><span>caution</span></div>
+        </div>
+        <div class="mock" style="background:#FFFFFF; color:#1A1A1A; border:1px solid #E5E5E3;">
+          <div class="mock-head">
+            <div class="mock-icon" style="background:#5E6AD2; color:#fff;">●</div>
+            <span class="mock-title">Python 缓存</span>
+            <span class="mock-count">12 项 · 安全 9</span>
+            <span class="mock-size">2.4 GB</span>
+          </div>
+          <div class="mock-row" style="border-color:#EFEFED;">
+            <div class="mock-cb on" style="background:#5E6AD2;"></div>
+            <div><div class="mock-row-name">__pycache__</div><div class="mock-row-path">D:\proj\app\__pycache__</div></div>
+            <span class="mock-row-size">128 MB</span>
+            <span class="mock-badge" style="background:rgba(26,127,55,.12); color:#1A7F37;">安全</span>
+          </div>
+          <div class="mock-row" style="border-color:#EFEFED;">
+            <div class="mock-cb" style="border-color:#D0D0CE;"></div>
+            <div><div class="mock-row-name">.pytest_cache</div><div class="mock-row-path">D:\proj\.pytest_cache</div></div>
+            <span class="mock-row-size">4.2 MB</span>
+            <span class="mock-badge" style="background:rgba(154,103,0,.12); color:#9A6700;">需确认</span>
+          </div>
+          <div class="mock-btn" style="background:#5E6AD2; color:#fff;">移入回收站</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ B. Editorial ============ -->
+  <div class="dir" data-choice="editorial" onclick="toggleSelect(this)">
+    <div class="dir-head">
+      <span class="dir-tag">B</span>
+      <span class="dir-name">Editorial · 暖纸墨色</span>
+      <span class="dir-desc">杂志/印刷质感。暖米白纸面、深墨字、单一赤陶强调色。温润、有文气、不冷冰冰。深色版是暖黑配奶白。</span>
+    </div>
+    <div class="dir-body">
+      <div class="theme-col">
+        <div class="t-label">Paper</div>
+        <div class="swatches">
+          <div class="sw" style="background:#F5F1EA"><span>bg</span></div>
+          <div class="sw" style="background:#FFFCF6"><span>panel</span></div>
+          <div class="sw" style="background:#EFE9DD"><span>panel2</span></div>
+          <div class="sw" style="background:#2B2722"><span>fg</span></div>
+          <div class="sw" style="background:#B8553A"><span>accent</span></div>
+          <div class="sw" style="background:#5B7A3D"><span>safe</span></div>
+          <div class="sw" style="background:#B07D2B"><span>caution</span></div>
+        </div>
+        <div class="mock" style="background:#FFFCF6; color:#2B2722; border:1px solid #DDD5C7;">
+          <div class="mock-head">
+            <div class="mock-icon" style="background:#B8553A; color:#fff;">●</div>
+            <span class="mock-title">Python 缓存</span>
+            <span class="mock-count">12 项 · 安全 9</span>
+            <span class="mock-size">2.4 GB</span>
+          </div>
+          <div class="mock-row" style="border-color:#E8E1D2;">
+            <div class="mock-cb on" style="background:#B8553A;"></div>
+            <div><div class="mock-row-name">__pycache__</div><div class="mock-row-path">D:\proj\app\__pycache__</div></div>
+            <span class="mock-row-size">128 MB</span>
+            <span class="mock-badge" style="background:rgba(91,122,61,.14); color:#5B7A3D;">安全</span>
+          </div>
+          <div class="mock-row" style="border-color:#E8E1D2;">
+            <div class="mock-cb" style="border-color:#C9C0AE;"></div>
+            <div><div class="mock-row-name">.pytest_cache</div><div class="mock-row-path">D:\proj\.pytest_cache</div></div>
+            <span class="mock-row-size">4.2 MB</span>
+            <span class="mock-badge" style="background:rgba(176,125,43,.14); color:#B07D2B;">需确认</span>
+          </div>
+          <div class="mock-btn" style="background:#B8553A; color:#fff;">移入回收站</div>
+        </div>
+      </div>
+      <div class="theme-col">
+        <div class="t-label">Ink</div>
+        <div class="swatches">
+          <div class="sw" style="background:#1C1A17"><span>bg</span></div>
+          <div class="sw" style="background:#252320"><span>panel</span></div>
+          <div class="sw" style="background:#2D2A26"><span>panel2</span></div>
+          <div class="sw" style="background:#F0EBE0"><span>fg</span></div>
+          <div class="sw" style="background:#C77B5C"><span>accent</span></div>
+          <div class="sw" style="background:#8FB06A"><span>safe</span></div>
+          <div class="sw" style="background:#D9A85C"><span>caution</span></div>
+        </div>
+        <div class="mock" style="background:#252320; color:#F0EBE0; border:1px solid #3A3631;">
+          <div class="mock-head">
+            <div class="mock-icon" style="background:#C77B5C; color:#fff;">●</div>
+            <span class="mock-title">Python 缓存</span>
+            <span class="mock-count">12 项 · 安全 9</span>
+            <span class="mock-size">2.4 GB</span>
+          </div>
+          <div class="mock-row" style="border-color:#3A3631;">
+            <div class="mock-cb on" style="background:#C77B5C;"></div>
+            <div><div class="mock-row-name">__pycache__</div><div class="mock-row-path">D:\proj\app\__pycache__</div></div>
+            <span class="mock-row-size">128 MB</span>
+            <span class="mock-badge" style="background:rgba(143,176,106,.16); color:#8FB06A;">安全</span>
+          </div>
+          <div class="mock-row" style="border-color:#3A3631;">
+            <div class="mock-cb" style="border-color:#4A4640;"></div>
+            <div><div class="mock-row-name">.pytest_cache</div><div class="mock-row-path">D:\proj\.pytest_cache</div></div>
+            <span class="mock-row-size">4.2 MB</span>
+            <span class="mock-badge" style="background:rgba(217,168,92,.16); color:#D9A85C;">需确认</span>
+          </div>
+          <div class="mock-btn" style="background:#C77B5C; color:#fff;">移入回收站</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ C. Curated ============ -->
+  <div class="dir" data-choice="curated" onclick="toggleSelect(this)">
+    <div class="dir-head">
+      <span class="dir-tag">C</span>
+      <span class="dir-name">Curated · 社区名作</span>
+      <span class="dir-desc">直接采用设计社区打磨过的成熟色板：Rosé Pine（雾玫瑰）+ Tokyo Night（东京夜）。色相细腻、明度阶考究，自带粉丝基础。</span>
+    </div>
+    <div class="dir-body">
+      <div class="theme-col">
+        <div class="t-label">Rosé Pine</div>
+        <div class="swatches">
+          <div class="sw" style="background:#191724"><span>bg</span></div>
+          <div class="sw" style="background:#1F1D2E"><span>panel</span></div>
+          <div class="sw" style="background:#26233A"><span>panel2</span></div>
+          <div class="sw" style="background:#E0DEF4"><span>fg</span></div>
+          <div class="sw" style="background:#EBBCBA"><span>accent</span></div>
+          <div class="sw" style="background:#9CCFD8"><span>safe</span></div>
+          <div class="sw" style="background:#F6C177"><span>caution</span></div>
+        </div>
+        <div class="mock" style="background:#1F1D2E; color:#E0DEF4; border:1px solid #403D52;">
+          <div class="mock-head">
+            <div class="mock-icon" style="background:#EBBCBA; color:#191724;">●</div>
+            <span class="mock-title">Python 缓存</span>
+            <span class="mock-count">12 项 · 安全 9</span>
+            <span class="mock-size">2.4 GB</span>
+          </div>
+          <div class="mock-row" style="border-color:#403D52;">
+            <div class="mock-cb on" style="background:#EBBCBA;"></div>
+            <div><div class="mock-row-name">__pycache__</div><div class="mock-row-path">D:\proj\app\__pycache__</div></div>
+            <span class="mock-row-size">128 MB</span>
+            <span class="mock-badge" style="background:rgba(156,207,216,.16); color:#9CCFD8;">安全</span>
+          </div>
+          <div class="mock-row" style="border-color:#403D52;">
+            <div class="mock-cb" style="border-color:#524767;"></div>
+            <div><div class="mock-row-name">.pytest_cache</div><div class="mock-row-path">D:\proj\.pytest_cache</div></div>
+            <span class="mock-row-size">4.2 MB</span>
+            <span class="mock-badge" style="background:rgba(246,193,119,.16); color:#F6C177;">需确认</span>
+          </div>
+          <div class="mock-btn" style="background:#EBBCBA; color:#191724;">移入回收站</div>
+        </div>
+      </div>
+      <div class="theme-col">
+        <div class="t-label">Tokyo Night</div>
+        <div class="swatches">
+          <div class="sw" style="background:#1A1B26"><span>bg</span></div>
+          <div class="sw" style="background:#16161E"><span>panel</span></div>
+          <div class="sw" style="background:#1F2335"><span>panel2</span></div>
+          <div class="sw" style="background:#C0CAF5"><span>fg</span></div>
+          <div class="sw" style="background:#7AA2F7"><span>accent</span></div>
+          <div class="sw" style="background:#9ECE6A"><span>safe</span></div>
+          <div class="sw" style="background:#E0AF68"><span>caution</span></div>
+        </div>
+        <div class="mock" style="background:#16161E; color:#C0CAF5; border:1px solid #2D2F40;">
+          <div class="mock-head">
+            <div class="mock-icon" style="background:#7AA2F7; color:#1A1B26;">●</div>
+            <span class="mock-title">Python 缓存</span>
+            <span class="mock-count">12 项 · 安全 9</span>
+            <span class="mock-size">2.4 GB</span>
+          </div>
+          <div class="mock-row" style="border-color:#2D2F40;">
+            <div class="mock-cb on" style="background:#7AA2F7;"></div>
+            <div><div class="mock-row-name">__pycache__</div><div class="mock-row-path">D:\proj\app\__pycache__</div></div>
+            <span class="mock-row-size">128 MB</span>
+            <span class="mock-badge" style="background:rgba(158,206,106,.16); color:#9ECE6A;">安全</span>
+          </div>
+          <div class="mock-row" style="border-color:#2D2F40;">
+            <div class="mock-cb" style="border-color:#3B3F55;"></div>
+            <div><div class="mock-row-name">.pytest_cache</div><div class="mock-row-path">D:\proj\.pytest_cache</div></div>
+            <span class="mock-row-size">4.2 MB</span>
+            <span class="mock-badge" style="background:rgba(224,175,104,.16); color:#E0AF68;">需确认</span>
+          </div>
+          <div class="mock-btn" style="background:#7AA2F7; color:#1A1B26;">移入回收站</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="pick">
+  <button onclick="confirmPick()">确认选择</button>
+  <p class="hint">点上方卡片选中，再点确认；或直接在终端告诉我 A / B / C。</p>
+</div>
+
+<script>
+  let picked = null;
+  function toggleSelect(el) {
+    document.querySelectorAll('.dir').forEach(d => d.classList.remove('selected'));
+    el.classList.add('selected');
+    picked = el.dataset.choice;
+  }
+  function confirmPick() {
+    if (!picked) { alert('先点一个方向'); return; }
+    const evt = { type: 'click', choice: picked, text: picked, timestamp: Date.now()/1000 };
+    fetch('/events', { method: 'POST', body: JSON.stringify(evt) }).catch(()=>{});
+    document.querySelector('.pick button').textContent = '已选 ' + picked + ' · 回终端继续';
+  }
+</script>
+
+</body>
+</html>

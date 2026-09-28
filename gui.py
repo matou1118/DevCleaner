@@ -1,17 +1,21 @@
 """DevCleaner 原生界面（PySide6）。扫描逻辑全在 app.py，这里只管显示。"""
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
                                QHBoxLayout, QLabel, QMainWindow, QMessageBox,
                                QPushButton, QScrollArea, QSizePolicy, QTextEdit,
                                QVBoxLayout, QWidget, QProgressBar)
 
 import app as engine
+
+# 勾选态底色，由 apply_theme 按当前主题算出（模块级，ItemRow 构造时用默认值）
+SEL_TINT = "rgba(91,140,255,26)"
 
 
 def fmt(it) -> str:
@@ -74,15 +78,16 @@ QLabel#badgeNote    {{ font-size:10px; color:{t['fg3']}; }}
 QLabel#stage    {{ font-size:12px; color:{t['fg2']}; }}
 QLabel#footText {{ font-size:12px; color:{t['fg2']}; }}
 QLabel#themeLbl {{ font-size:12px; color:{t['fg3']}; }}
+QFrame#cardHead {{ cursor:pointer; }}
 
 QPushButton {{ background:{t['panel2']}; border:1px solid {t['line2']}; border-radius:6px;
               padding:7px 15px; color:{t['fg']}; }}
 QPushButton:hover   {{ background:{t['panel']}; border-color:{t['accent']}; }}
 QPushButton:pressed {{ background:{t['bg']}; }}
 QPushButton:disabled{{ color:{t['fg3']}; border-color:{t['line']}; background:{t['panel']}; }}
-QPushButton#primary {{ background:{t['accent']}; border-color:{t['accent']}; color:white;
-                      font-weight:600; padding:8px 20px; }}
-QPushButton#primary:hover    {{ background:{t['accent']}; }}
+QPushButton#primary {{ background:{t['accent']}; border-color:{t['accent']};
+                      color:{t['onaccent']}; font-weight:600; padding:8px 20px; }}
+QPushButton#primary:hover    {{ background:{t['accent2']}; border-color:{t['accent2']}; }}
 QPushButton#primary:disabled {{ background:{t['panel2']}; border-color:{t['line']};
                                color:{t['fg3']}; }}
 QPushButton#head {{ background:transparent; border:none; text-align:left; padding:0; }}
@@ -124,16 +129,17 @@ def _lbl(text: str, obj: str = "", parent: Optional[QWidget] = None) -> QLabel:
     return w
 
 
-def _make_check_png() -> str:
-    """QSS 没法画对勾，只能给它一张图。运行时用 QPainter 画一张，省掉打包资源。"""
+def _make_check_png(color: str) -> str:
+    """QSS 没法画对勾，只能给它一张图。运行时用 QPainter 画一张，省掉打包资源。
+    颜色要跟主题走 —— 白对勾压在浅强调色（Rosé Pine / Tokyo Night）上几乎看不见。"""
     from PySide6.QtCore import QPointF, Qt
     from PySide6.QtGui import QPainter, QPen, QPixmap
-    d = Path(os.environ.get("TEMP", ".")) / "devcleaner_check.png"
+    d = Path(os.environ.get("TEMP", ".")) / f"devcleaner_check_{color.lstrip('#')}.png"
     pm = QPixmap(16, 16)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QPen(QColor("#ffffff"), 2.2, Qt.PenStyle.SolidLine,
+    p.setPen(QPen(QColor(color), 2.2, Qt.PenStyle.SolidLine,
                   Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
     p.drawPolyline([QPointF(3.5, 8.4), QPointF(6.6, 11.6), QPointF(12.5, 4.8)])
     p.end()
@@ -154,6 +160,7 @@ class ItemRow(QFrame):
         super().__init__(parent)
         self.path = it.path
         self.setObjectName("rowRo" if not selectable else "row")
+        self.sel_color = SEL_TINT          # 勾选态底色，由 apply_theme 刷新
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         h = QHBoxLayout(self)
@@ -195,10 +202,14 @@ class ItemRow(QFrame):
         self.cb.blockSignals(True)
         self.cb.setChecked(on)
         self.cb.blockSignals(False)
-        self.setObjectName("rowSel" if on and self.cb.isEnabled() else
-                           ("rowRo" if not self.cb.isEnabled() else "row"))
-        self.style().unpolish(self)
-        self.style().polish(self)
+        # 用 palette 上色，不要 setObjectName + unpolish/polish。
+        # 后者会让 Qt 重新解析整份样式表，勾选 30 个条目就是 30 次全量重算，
+        # 主线程直接卡住 —— 表现就是整窗闪。
+        self.setAutoFillBackground(True)
+        pal = self.palette()
+        pal.setColor(QPalette.ColorRole.Window,
+                     QColor(self.sel_color) if on else QColor(0, 0, 0, 0))
+        self.setPalette(pal)
 
 
 # ============================ 分类卡片 ============================
@@ -206,7 +217,7 @@ class ItemRow(QFrame):
 
 class CategoryCard(QFrame):
     def __init__(self, title: str, icon: str, items, hint: str, selectable: bool,
-                 on_change, parent=None):
+                 on_change, expanded: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("card")
         self.rows: List[ItemRow] = []
@@ -243,7 +254,6 @@ class CategoryCard(QFrame):
         head.mousePressEvent = self._flip
         v.addWidget(head)
         self.head = head
-
         self.body = QWidget()
         self.body.setObjectName("rowRo")
         bl = QVBoxLayout(self.body)
@@ -273,16 +283,30 @@ class CategoryCard(QFrame):
             fb.addStretch(1)
             fb.addWidget(_lbl(f"共 {_mix([i.size for i in items], units)}", "catHint"))
             v.addWidget(bar)
+            self.footbar = bar
+        else:
+            self.footbar = None
         self.set_total(items)
+        self.set_expanded(expanded)
+
+    def set_expanded(self, on: bool) -> None:
+        """默认折叠：一屏能看完所有分类，不必一路往下翻"""
+        self.body.setVisible(on)
+        if self.footbar is not None:
+            self.footbar.setVisible(on)
+        self.arrow.setText("▾" if on else "▸")
+
+    def expanded(self) -> bool:
+        # 用 isHidden 而不是 isVisible：isVisible 会因为祖先未显示而恒为 False，
+        # 只有 isHidden 表达「是我们主动折叠的」这一个意思。
+        return not self.body.isHidden()
 
     def set_total(self, items) -> None:
         units = [getattr(i, "unit", "bytes") for i in items]
         self.size.setText(_mix([i.size for i in items], units))
 
     def _flip(self, _e) -> None:
-        vis = not self.body.isVisible()
-        self.body.setVisible(vis)
-        self.arrow.setText("▾" if vis else "▸")
+        self.set_expanded(self.body.isHidden())
 
     def _bulk(self, on: bool) -> None:
         for r in self.rows:
@@ -305,7 +329,15 @@ class ScanThread(QThread):
     done = Signal()
 
     def run(self) -> None:
-        engine.run_scan(on_progress=lambda s, p: self.progressed.emit(s, p))
+        # 扫描线程几乎全程持 GIL 做 os.scandir/stat。默认 5ms 的切换间隔会让
+        # 主线程和它互相抢，界面卡成幻灯片。放大到 25ms 后主线程能稳定拿到
+        # 时间片，进度条和展开/折叠都不卡。
+        old = sys.getswitchinterval()
+        try:
+            sys.setswitchinterval(0.025)
+            engine.run_scan(on_progress=lambda s, p: self.progressed.emit(s, p))
+        finally:
+            sys.setswitchinterval(old)
         self.done.emit()
 
 
@@ -322,6 +354,9 @@ class MainWindow(QMainWindow):
         self.cards: List[CategoryCard] = []
         self.notes_cards: List[CategoryCard] = []
         self.thread: Optional[ScanThread] = None
+        self.theme = engine.DEFAULT_THEME
+        self._remember = True     # 构造期套用默认主题时不回写配置
+        self._last_stage = 0.0    # 阶段文字节流用，避免扫描期密集重绘
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -341,9 +376,12 @@ class MainWindow(QMainWindow):
         hl.addLayout(titles)
         hl.addStretch(1)
         self.cb_theme = QComboBox()
-        for k, v in engine.THEMES.items():
-            self.cb_theme.addItem(v["n"], k)
+        for k in engine.THEME_ORDER:
+            self.cb_theme.addItem(engine.THEMES[k]["n"], k)
         self.cb_theme.setToolTip("配色主题")
+        default = engine.DEFAULT_THEME
+        if default in engine.THEME_ORDER:
+            self.cb_theme.setCurrentIndex(engine.THEME_ORDER.index(default))
         self.cb_theme.currentIndexChanged.connect(self.apply_theme)
         hl.addWidget(_lbl("主题", "themeLbl"))
         hl.addWidget(self.cb_theme)
@@ -361,6 +399,11 @@ class MainWindow(QMainWindow):
         self.btn_scan.setObjectName("primary")
         self.btn_scan.clicked.connect(self.start_scan)
         bl.addWidget(self.btn_scan)
+        self.btn_expand = QPushButton("全部展开")
+        self.btn_expand.clicked.connect(
+            lambda: self._set_all_expanded(not self.cards[0].expanded()
+                                           if self.cards else False))
+        bl.addWidget(self.btn_expand)
         self.prog = QProgressBar()
         self.prog.setTextVisible(False)
         self.prog.setRange(0, 100)
@@ -441,7 +484,13 @@ class MainWindow(QMainWindow):
         self.placeholder.show()
         self.btn_scan.setEnabled(False)
         self.btn_scan.setText("扫描中…")
-        self.prog.setValue(0)
+        self.btn_expand.setEnabled(False)
+        # 扫描期改成不确定进度条（走马灯），并节流阶段文字。
+        # 原因：扫描线程全程做 os.scandir/stat，信号一密集就会让主线程反复
+        # 重绘整窗（本窗口有 160+ 个带样式的子控件，一次重绘就是全窗），
+        # 表现出来就是「全屏闪动」。走马灯 + 250ms 节流把重绘压到最低。
+        self.prog.setRange(0, 0)
+        self._last_stage = 0.0
         self.stage.setText("准备中")
         self.log.clear()
         self.thread = ScanThread()
@@ -450,14 +499,19 @@ class MainWindow(QMainWindow):
         self.thread.start()
 
     def _on_progress(self, stage: str, p: float) -> None:
+        now = time.monotonic()
+        if now - self._last_stage < 0.25:
+            return
+        self._last_stage = now
         self.stage.setText(stage)
-        self.prog.setValue(int(p * 100))
 
     def _on_done(self) -> None:
         self.btn_scan.setEnabled(True)
         self.btn_scan.setText("重新扫描")
+        self.btn_expand.setEnabled(True)
         self.placeholder.hide()
         self.stage.setText(f"完成 · {engine.STATE.finished_at}")
+        self.prog.setRange(0, 100)
         self.prog.setValue(100)
         self.log.setPlainText("\n".join(engine.STATE.log))
         if any(l.startswith(("[失败", "[异常")) for l in engine.STATE.log):
@@ -494,6 +548,7 @@ class MainWindow(QMainWindow):
                              False, self._on_toggle)
             self.list_layout.insertWidget(self.list_layout.count() - 1, c)
             self.notes_cards.append(c)
+        self._set_all_expanded(False)
         self.t_safe.setText(engine.human(sum(i.size for i in engine.STATE.items
                                               if i.risk == "safe" and i.unit != "count")))
         self.t_caut.setText(engine.human(sum(i.size for i in engine.STATE.items
@@ -541,24 +596,35 @@ class MainWindow(QMainWindow):
             + _mix([i.size for i in sel], [getattr(i, "unit", "bytes") for i in sel]))
         self.btn_clean.setEnabled(bool(sel))
 
+    def _set_all_expanded(self, on: bool) -> None:
+        for c in self.cards + self.notes_cards:
+            c.set_expanded(on)
+        self.btn_expand.setText("全部折叠" if on else "全部展开")
+
     # ---------------- 主题 ----------------
     def apply_theme(self, idx: int) -> None:
         key = self.cb_theme.itemData(idx)
         t = engine.THEMES.get(key)
         if not t:
             return
-        app = QApplication.instance()
-        if app is None:
+        qa = QApplication.instance()
+        if qa is None:
             return
-        check = _check_png_cache.get("path")
+        check = _check_png_cache.get(t["onaccent"])
         if not check:
-            check = _make_check_png()
-            _check_png_cache["path"] = check
-        app.setStyleSheet(build_qss(t).replace("__CHECK__", check))
+            check = _make_check_png(t["onaccent"])
+            _check_png_cache[t["onaccent"]] = check
+        qa.setStyleSheet(build_qss(t).replace("__CHECK__", check))
         self.theme = key
+        # 勾选底色是按主题算的，换主题要重刷一遍（palette 改色，不重解析样式表）
+        global SEL_TINT
+        SEL_TINT = t["sel"]
         for c in self.cards + self.notes_cards:
             for r in c.rows:
+                r.sel_color = SEL_TINT
                 r.set_checked(r.cb.isChecked())
+        if self._remember:
+            engine.set_config_value("theme", f'"{key}"')   # 记住选择，重启仍是这套
 
     # ---------------- 清理 ----------------
     def do_clean(self) -> None:
@@ -649,7 +715,9 @@ def main() -> int:
     qa.setStyle("Fusion")
     qa.setFont(QFont("Microsoft YaHei UI", 9))
     w = MainWindow()
-    w.apply_theme(0)
+    w._remember = False          # 启动时应用默认主题，不回写
+    w.apply_theme(w.cb_theme.currentIndex())
+    w._remember = True
     w.show()
     QTimer.singleShot(250, w.start_scan)   # 打开就扫，不用手点
     return qa.exec()

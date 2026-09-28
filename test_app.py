@@ -194,16 +194,82 @@ def t_run_scan(tmp):
 
 # ---------------- 主题 ----------------
 def t_themes():
-    assert len(app.THEMES) >= 4, f"主题太少: {len(app.THEMES)}"
-    need = {"n", "bg", "panel", "panel2", "line", "line2", "fg", "fg2", "fg3",
-            "accent", "safe", "caution"}
+    assert len(app.THEMES) == 6, f"应是设计稿的 6 套，实际 {len(app.THEMES)}"
+    assert app.THEME_ORDER == ["Studio Dark", "Studio Light", "Paper", "Ink",
+                              "Rosé Pine", "Tokyo Night"], app.THEME_ORDER
+    need = {"n", "bg", "panel", "panel2", "fg", "fg2", "fg3", "line", "line2",
+            "accent", "accent2", "safe", "caution", "onaccent"}
     for k, t in app.THEMES.items():
         missing = need - set(t)
         assert not missing, f"{k} 缺字段 {missing}"
-        for f in ("bg", "panel", "panel2", "line", "fg", "accent"):
-            assert t[f].startswith("#") and len(t[f]) == 7, f"{k}.{f}={t[f]}"
+        for f in need - {"n"}:
+            v = t[f]
+            assert v.startswith("#") and len(v) == 7, f"{k}.{f}={v}"
     names = [t["n"] for t in app.THEMES.values()]
     assert len(set(names)) == len(names), f"主题重名: {names}"
+    assert app.DEFAULT_THEME in app.THEMES, f"默认主题不存在: {app.DEFAULT_THEME}"
+
+
+def t_theme_contrast():
+    """正文与强调色上的文字必须达到 WCAG AA（4.5:1）。这是唯一不能糊弄的地方。"""
+    def ratio(a, b):
+        def lum(h):
+            h = h.lstrip("#")
+            out = []
+            for i in (0, 2, 4):
+                v = int(h[i:i + 2], 16) / 255.0
+                out.append(v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4)
+            return 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2]
+        la, lb = lum(a), lum(b)
+        hi, lo = max(la, lb), min(la, lb)
+        return (hi + 0.05) / (lo + 0.05)
+
+    bad = []
+    for name, t in app.THEMES.items():
+        checks = [
+            ("正文/底色", t["fg"], t["bg"]),
+            ("次级文字/面板", t["fg2"], t["panel"]),
+            ("三级文字/面板", t["fg3"], t["panel"]),
+            ("正文/面板", t["fg"], t["panel"]),
+            ("强调色上的文字/强调色", t["onaccent"], t["accent"]),
+            ("safe/面板", t["safe"], t["panel"]),
+            ("caution/面板", t["caution"], t["panel"]),
+        ]
+        for label, a, b in checks:
+            r = ratio(a, b)
+            need = 3.0 if label.startswith(("三级", "caution")) else 4.5
+            if r < need:
+                bad.append(f"{name} {label} = {r:.2f}:1 (需 {need})")
+    assert not bad, "对比度不达标:\n  " + "\n  ".join(bad)
+
+
+def t_theme_onaccent_pick():
+    """onaccent 必须在「白字 vs 主题底色字」里取对比度更高的那个。
+    深色候选是 bg 不是 fg —— 浅强调色上 fg 本身接近白，等于没得选。"""
+    for name, t in app.THEMES.items():
+        bg = app._contrast(t["bg"], t["accent"])
+        wh = app._contrast("#FFFFFF", t["accent"])
+        if bg >= wh:
+            assert t["onaccent"] == t["bg"], f"{name}: 应选底色字却是 {t['onaccent']}"
+        else:
+            assert t["onaccent"] == "#FFFFFF", f"{name}: 应选白字却是 {t['onaccent']}"
+
+
+def t_theme_tokens_match_design():
+    """主色必须与设计稿逐字一致（其余字段是推导的，不在此列）"""
+    DESIGN = {
+        "Studio Dark": ("#08090A", "#0E0F11", "#16171A", "#F7F8F8", "#5E6AD2", "#3FB950", "#D29922"),
+        "Studio Light": ("#FBFBFA", "#FFFFFF", "#F4F4F2", "#1A1A1A", "#5E6AD2", "#1A7F37", "#9A6700"),
+        "Paper": ("#F5F1EA", "#FFFCF6", "#EFE9DD", "#2B2722", "#B8553A", "#5B7A3D", "#B07D2B"),
+        "Ink": ("#1C1A17", "#252320", "#2D2A26", "#F0EBE0", "#C77B5C", "#8FB06A", "#D9A85C"),
+        "Rosé Pine": ("#191724", "#1F1D2E", "#26233A", "#E0DEF4", "#EBBCBA", "#9CCFD8", "#F6C177"),
+        "Tokyo Night": ("#1A1B26", "#16161E", "#1F2335", "#C0CAF5", "#7AA2F7", "#9ECE6A", "#E0AF68"),
+    }
+    keys = ("bg", "panel", "panel2", "fg", "accent", "safe", "caution")
+    for name, vals in DESIGN.items():
+        t = app.THEMES[name]
+        got = tuple(t[k] for k in keys)
+        assert got == vals, f"{name} 主色与设计稿不符:\n  期望 {vals}\n  实际 {got}"
 
 
 # ---------------- 空文件 / 空目录 保留名单 ----------------
@@ -400,6 +466,39 @@ def t_real_orphan_detected():
         app.delete_registry_key("HKCU", branch)
 
 
+def t_set_config_preserves_comments():
+    """就地改配置不能把用户写的注释冲掉（全量 yaml.dump 会）"""
+    p = Path(tempfile.mkdtemp(prefix="dc_cfg_")) / "settings.yaml"
+    p.write_text(
+        "# 这是注释，必须活着\n"
+        "scan_roots:\n"
+        "  - \"C:/a\"\n"
+        "theme: \"Old\"\n"
+        "# 尾部注释\n",
+        encoding="utf-8")
+    old = app.resource
+    app.resource = lambda *a: p                      # type: ignore[assignment]
+    try:
+        assert app.set_config_value("theme", '"Ink"'), "写入失败"
+        txt = p.read_text(encoding="utf-8")
+        assert "# 这是注释，必须活着" in txt, txt
+        assert "# 尾部注释" in txt, txt
+        assert 'theme: "Ink"' in txt, txt
+        assert 'theme: "Old"' not in txt, txt
+        # 再写一次应就地替换而不是追加第二行
+        assert app.set_config_value("theme", '"Paper"')
+        txt = p.read_text(encoding="utf-8")
+        assert txt.count("theme:") == 1, txt
+        assert 'theme: "Paper"' in txt, txt
+        # 写不存在的键应追加，且不破坏原内容
+        assert app.set_config_value("theme2", "42")
+        txt = p.read_text(encoding="utf-8")
+        assert "theme2: 42" in txt and "scan_roots:" in txt, txt
+    finally:
+        app.resource = old                      # type: ignore[assignment]
+        shutil.rmtree(p.parent, ignore_errors=True)
+
+
 # ---------------- 传统垃圾 ----------------
 def t_junk(tmp):
     old = app.CFG
@@ -439,6 +538,76 @@ def t_clone_guard(tmp):
         assert str(good) not in cands, "有 remote 的仓库被列为可删！"
     finally:
         app.CFG = old
+
+
+def t_no_repolish_on_check():
+    """勾选态必须走 palette，不能碰 unpolish/polish。
+    unpolish/polish 会让 Qt 重新解析整份样式表，30 个条目就是 30 次全量重算，
+    主线程卡死 —— 表现为扫描结束时整窗闪。"""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    import gui
+    from PySide6.QtCore import Qt
+    qa = QApplication.instance() or QApplication([])
+    w = gui.MainWindow()
+    w._render()
+    w.bulk(True, only_safe=True)
+    w.recalc()
+    src = open(gui.__file__, encoding="utf-8").read()
+    code = "\n".join(ln.split("#", 1)[0] for ln in src.splitlines())
+    assert "unpolish" not in code, "gui.py 的代码里又出现 unpolish 了"
+    assert ".polish(" not in code, "gui.py 的代码里又出现 polish 了"
+    rows = [r for c in w.cards for r in c.rows]
+    assert rows, "没有渲染出任何条目行"
+    r = rows[0]
+    # 勾选 -> 取消 -> 勾选，颜色必须跟着变（说明确实在用 palette 上色）
+    r.set_checked(True)
+    on = r.palette().color(r.palette().ColorRole.Window)
+    r.set_checked(False)
+    off = r.palette().color(r.palette().ColorRole.Window)
+    assert on.alpha() > 0, "勾选后底色应该不透明"
+    assert off.alpha() == 0, "取消勾选后底色应该完全透明"
+    w.close()
+
+
+def t_cards_collapsed_by_default():
+    """默认全部折叠：分类多于一屏时不用一路往下翻"""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    import gui
+    qa = QApplication.instance() or QApplication([])
+    w = gui.MainWindow()
+    w._render()
+    assert w.cards, "没有渲染出分类卡片"
+    assert all(not c.expanded() for c in w.cards), "默认应该全部折叠"
+    assert all(c.body.isHidden() for c in w.cards), "折叠态下 body 应为显式隐藏"
+    w._set_all_expanded(True)
+    assert all(c.expanded() for c in w.cards), "全部展开没生效"
+    assert not any(c.body.isHidden() for c in w.cards)
+    assert w.btn_expand.text() == "全部折叠", w.btn_expand.text()
+    w._set_all_expanded(False)
+    assert all(not c.expanded() for c in w.cards), "全部折叠没生效"
+    w.close()
+
+
+def t_expand_button_click():
+    """真点一下「全部展开」，走完整信号/槽链路（离屏也能测，不用鼠标）"""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    import gui
+    qa = QApplication.instance() or QApplication([])
+    w = gui.MainWindow()
+    w._render()
+    assert w.cards and w.btn_expand.isEnabled()
+    w.btn_expand.click()                      # 第 1 次：应全部展开
+    assert all(c.expanded() for c in w.cards), "点按钮没展开"
+    assert w.btn_expand.text() == "全部折叠", w.btn_expand.text()
+    w.btn_expand.click()                      # 第 2 次：应全部折叠
+    assert all(not c.expanded() for c in w.cards), "点按钮没折叠"
+    w.close()
 
 
 # ---------------- 界面能在离屏模式下构建 ----------------
@@ -498,6 +667,13 @@ if __name__ == "__main__":
         check("未启用插件识别", lambda: t_unused(tmp))
         check("run_scan 端到端", lambda: t_run_scan(tmp))
         check("主题定义", t_themes)
+        check("主题主色与设计稿一致", t_theme_tokens_match_design)
+        check("主题对比度达 WCAG AA", t_theme_contrast)
+        check("onaccent 选取正确", t_theme_onaccent_pick)
+        check("改配置保留注释", t_set_config_preserves_comments)
+        check("勾选不重解析样式表", t_no_repolish_on_check)
+        check("分类默认折叠", t_cards_collapsed_by_default)
+        check("展开按钮真实点击", t_expand_button_click)
         check("空文件保留名单", lambda: t_keep_empty(tmp))
         check("批量空文件真删", lambda: t_bulk_empty_delete(tmp))
         check("传统垃圾扫描", lambda: t_junk(tmp))

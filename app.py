@@ -1473,27 +1473,123 @@ def apply_registry_item(it: Item) -> Tuple[bool, str]:
 
 
 # ============================ 主题 ============================
+#
+# 色值原样取自 docs/palette-directions.html（设计稿，勿手改这里，要改改设计稿）。
+# 设计稿给了 7 个主色 + 从 mockup 边框反推出的分割线色；次级/三级文字色、
+# 分割线亮度和「强调色上的文字色」由主色推导 —— 推导而不是手抄，是因为
+# 用户改主色时这几项要跟着自动走，且对比度是算出来的不是猜的。
 
-THEMES: Dict[str, Dict[str, str]] = {
-    "midnight": {"n": "暗夜", "bg": "#0b0d12", "panel": "#151926", "panel2": "#1b2030",
-                 "line": "#242a3b", "line2": "#2f3648", "fg": "#e6e9f2", "fg2": "#9aa3bb",
-                 "fg3": "#6b7490", "accent": "#5b8cff", "safe": "#3ddc97", "caution": "#ffb020"},
-    "obsidian": {"n": "曜石", "bg": "#0a0a0a", "panel": "#141414", "panel2": "#1c1c1c",
-                 "line": "#262626", "line2": "#333333", "fg": "#ededed", "fg2": "#a0a0a0",
-                 "fg3": "#6e6e6e", "accent": "#c8a45c", "safe": "#7ec98f", "caution": "#e0a94a"},
-    "forest": {"n": "森林", "bg": "#0a1210", "panel": "#121d1a", "panel2": "#182622",
-               "line": "#1f3129", "line2": "#2a4036", "fg": "#e2f0e8", "fg2": "#94b3a4",
-               "fg3": "#678477", "accent": "#3fa87a", "safe": "#6ee7a8", "caution": "#e0b055"},
-    "crimson": {"n": "绯", "bg": "#120a0d", "panel": "#1d1015", "panel2": "#26161c",
-                "line": "#331e26", "line2": "#442732", "fg": "#f2e4e8", "fg2": "#bf97a3",
-                "fg3": "#8a6a74", "accent": "#e05263", "safe": "#4ec98a", "caution": "#e8a33d"},
-    "ocean": {"n": "深海", "bg": "#071016", "panel": "#0d1a22", "panel2": "#12232d",
-              "line": "#173039", "line2": "#20414d", "fg": "#dff0f5", "fg2": "#8fb4c0",
-              "fg3": "#5f8894", "accent": "#2aa5c0", "safe": "#45d0a0", "caution": "#e0ac4a"},
-    "paper": {"n": "素白", "bg": "#f4f5f7", "panel": "#ffffff", "panel2": "#f0f2f5",
-              "line": "#dfe3ea", "line2": "#c9d0dc", "fg": "#1a1f2b", "fg2": "#4d5769",
-              "fg3": "#7b8598", "accent": "#2f6bdc", "safe": "#129a63", "caution": "#b8760a"},
-}
+
+def _hx(h: str) -> Tuple[int, int, int]:
+    h = h.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _hs(r: int, g: int, b: int) -> str:
+    return "#%02X%02X%02X" % (max(0, min(255, r)), max(0, min(255, g)),
+                              max(0, min(255, b)))
+
+
+def _mix(a: str, b: str, t: float) -> str:
+    """t=0 取 a，t=1 取 b"""
+    A, B = _hx(a), _hx(b)
+    return _hs(*[round(A[i] + (B[i] - A[i]) * t) for i in range(3)])
+
+
+def _lum(h: str) -> float:
+    def ch(v: int) -> float:
+        v /= 255.0
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = _hx(h)
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+
+
+def _contrast(a: str, b: str) -> float:
+    la, lb = _lum(a), _lum(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _theme(name: str, bg: str, panel: str, panel2: str, fg: str, accent: str,
+           safe: str, caution: str, line: str) -> Dict[str, str]:
+    # 强调色上的文字：在「白字 vs 主题底色字」里取对比度更高的那个。
+    # 深色候选必须是 bg 而不是 fg —— 浅强调色（Rosé Pine 的 #EBBCBA、
+    # Tokyo Night 的 #7AA2F7）上，fg 本身是近白色，等于没得选，只有 1.7:1。
+    # 设计稿在这两套上用的正是各自的 bg。Ink 的强调色上白字只有 3.3:1，
+    # 这里改用底色字（5.3:1）—— 唯一一处偏离设计稿，为了过 AA。
+    on = bg if _contrast(bg, accent) >= _contrast("#FFFFFF", accent) else "#FFFFFF"
+    return {
+        "n": name,
+        "bg": bg, "panel": panel, "panel2": panel2, "fg": fg,
+        "accent": accent, "safe": safe, "caution": caution,
+        "line": line,
+        "line2": _mix(line, fg, 0.22),          # 底栏等需要更亮的分隔线
+        "fg2": _mix(bg, fg, 0.66),              # 次级文字（路径、元信息）
+        "fg3": _mix(bg, fg, 0.52),              # 三级文字（说明、标签）
+        "onaccent": on,
+        "accent2": _mix(accent, bg, 0.16),      # 主按钮 hover
+        # 勾选行底色：强调色压到 10% 不透明度。写成 rgba() 是因为它是盖在
+        # 面板色上的半透明层，用 palette 上色才不用重解析样式表。
+        "sel": "rgba(%d,%d,%d,26)" % _hx(accent),
+    }
+
+
+# 三个方向，每个方向一深一浅，共 6 套。line 色从设计稿 mockup 的
+# border-color / row border-color 反推。
+_PALETTES = [
+    # A. Studio —— Linear / Vercel / Raycast 那一脉
+    _theme("Studio Dark", "#08090A", "#0E0F11", "#16171A", "#F7F8F8",
+           "#5E6AD2", "#3FB950", "#D29922", "#1E1F22"),
+    _theme("Studio Light", "#FBFBFA", "#FFFFFF", "#F4F4F2", "#1A1A1A",
+           "#5E6AD2", "#1A7F37", "#9A6700", "#E5E5E3"),
+    # B. Editorial —— 杂志/印刷质感，暖米白纸面 + 深墨字 + 单一赤陶强调色
+    _theme("Paper", "#F5F1EA", "#FFFCF6", "#EFE9DD", "#2B2722",
+           "#B8553A", "#5B7A3D", "#B07D2B", "#DDD5C7"),
+    _theme("Ink", "#1C1A17", "#252320", "#2D2A26", "#F0EBE0",
+           "#C77B5C", "#8FB06A", "#D9A85C", "#3A3631"),
+    # C. Curated —— 社区打磨过的成熟色板
+    _theme("Rosé Pine", "#191724", "#1F1D2E", "#26233A", "#E0DEF4",
+           "#EBBCBA", "#9CCFD8", "#F6C177", "#403D52"),
+    _theme("Tokyo Night", "#1A1B26", "#16161E", "#1F2335", "#C0CAF5",
+           "#7AA2F7", "#9ECE6A", "#E0AF68", "#2D2F40"),
+]
+
+# 列表顺序 = 下拉框顺序，第一项为默认。改 DEFAULT_THEME 的名字即可换默认。
+THEMES: Dict[str, Dict[str, str]] = {t["n"]: t for t in _PALETTES}
+THEME_ORDER: List[str] = [t["n"] for t in _PALETTES]
+DEFAULT_THEME = str(CFG.get("theme") or "Ink")
+
+
+def set_config_value(key: str, value: str) -> bool:
+    """就地改 settings.yaml 的一个标量键。
+    刻意不用 yaml.safe_load + dump 全量重写 —— 那会把用户写的注释全冲掉。
+    逐行处理：找到就替换，没有就追加到末尾。"""
+    p = resource("settings.yaml")
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    line = f"{key}: {value}"
+    out: List[str] = []
+    hit = False
+    for ln in raw.splitlines():
+        s = ln.strip()
+        if s.startswith(f"{key}:") and not s.startswith(f"# {key}:") \
+                and not s.startswith("##"):
+            out.append(line)
+            hit = True
+        else:
+            out.append(ln)
+    if not hit:
+        if out and out[-1].strip():
+            out.append("")
+        out.append(line)
+    try:
+        p.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
 
 SCANNERS: List[Scanner] = [
     InstallerScanner(),
