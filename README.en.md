@@ -209,9 +209,9 @@ If it saved you some time:
 - ⭐ Star it so more people find it
 - 🐛 [Open an issue](https://github.com/matou1118/DevCleaner/issues) for bugs or new categories
 - 💬 Share it with anyone else annoyed by installer files and temp clutter
-- 💰 [GitHub Sponsors](https://github.com/sponsors/matou1118) to support maintenance
+- 💰 [Afdian](https://afdian.com/a/matou1118) to support maintenance
 
-**Donations aren't needed right now.** The author built this on their own machine, wrote down the reasoning in the [decision log](CHANGELOG.md), and it started as a personal itch. If it helped you, a star or a piece of feedback is worth more than money.
+Donations go toward server costs and a new dev machine. The author built this on their own machine, wrote down the reasoning in the [decision log](CHANGELOG.md), and it started as a personal itch. If it helped you, a star or a piece of feedback is worth more than money.
 
 ## License
 

@@ -209,9 +209,9 @@ Temp 里的东西全部在 7 天内，其中 121 MB 是正在运行的 PyInstall
 - ⭐ Star 一下，让更多人看到
 - 🐛 [提 Issue 报 bug 或要新分类](https://github.com/matou1118/DevCleaner/issues)
 - 💬 分享给同样被安装包和临时文件烦到的人
-- 💰 [GitHub Sponsors](https://github.com/sponsors/matou1118) 支持维护
+- 💰 [爱发电](https://afdian.com/a/matou1118) 支持维护
 
-**目前不需要捐款。** 作者是用自己的机器踩坑、把过程写进 [决策记录](CHANGELOG.md#决策记录) 的，本来就是为了省自己的事。如果它帮到你了，一个 Star 或一条反馈比打赏更有用。
+打赏的钱用来续服务器和换开发设备。 作者是用自己的机器踩坑、把过程写进 [决策记录](CHANGELOG.md#决策记录) 的，本来就是为了省自己的事。如果它帮到你了，一个 Star 或一条反馈比打赏更有用。
 
 ## License
 
