@@ -112,6 +112,15 @@ jobs:
 
   # Pushing a tag (v1.2.3) publishes a GitHub Release with the exe attached.
   # Draft by default so you can read the notes before it goes public.
+# 这里原来有一个 release job：tag 推送时用 softprops/action-gh-release 把 CI
+# 自己编的 exe 传上去。该 action 默认 overwrite_files=true，会把发布页上那份
+# 「人已经打开确认过」的二进制悄悄换成一个没人跑过的 —— 发布页和用户手里的
+# 对不上，出了 bug 谁都说不清是哪一份。
+#
+# 现在发布只有一个写者：本地 build.bat 出包 -> 用户实际打开确认 -> 上传。
+# CI 只负责证明「这份源码在 3.10~3.13 上能编能跑」，产物留作 artifact。
+#
+# 真要恢复自动发布，先加 overwrite_files: false，别让它覆盖。
   release:
     needs: package
     runs-on: windows-latest
