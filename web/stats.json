@@ -1,65 +1,29 @@
 {
-  "version": "0.1.0",
-  "scanned_at": "20:40:21",
-  "total": 2174755759,
-  "total_human": "2.03 GB",
-  "safe_human": "1.94 GB",
-  "caution_human": "84.23 MB",
+  "version": "0.2.0",
+  "scanned_at": "12:38:01",
+  "total": 25851322,
+  "total_human": "24.65 MB",
+  "safe_human": "20.04 MB",
+  "caution_human": "4.61 MB",
   "scanners": 9,
   "extra_by_count": 2,
   "categories": [
     {
-      "icon": "📦",
-      "zh": "已安装软件的安装包",
-      "en": "Installers of already-installed software",
-      "count": 6,
-      "bytes": 1625941916,
-      "size_human": "1.51 GB",
+      "icon": "🐍",
+      "zh": "Python 环境与缓存",
+      "en": "Python envs and caches",
+      "count": 2,
+      "bytes": 15343002,
+      "size_human": "14.63 MB",
       "count_extra": 0
     },
     {
       "icon": "🧹",
       "zh": "传统垃圾文件",
       "en": "Traditional junk files",
-      "count": 8,
-      "bytes": 254396169,
-      "size_human": "242.61 MB",
-      "count_extra": 0
-    },
-    {
-      "icon": "🐍",
-      "zh": "Python 环境与缓存",
-      "en": "Python envs and caches",
-      "count": 4,
-      "bytes": 113703915,
-      "size_human": "108.44 MB",
-      "count_extra": 0
-    },
-    {
-      "icon": "🔄",
-      "zh": "更新器残留",
-      "en": "Updater leftovers",
       "count": 1,
-      "bytes": 91424470,
-      "size_human": "87.19 MB",
-      "count_extra": 0
-    },
-    {
-      "icon": "🧰",
-      "zh": "AI Agent / Skill 缓存",
-      "en": "AI agent / skill caches",
-      "count": 1,
-      "bytes": 83489677,
-      "size_human": "79.62 MB",
-      "count_extra": 0
-    },
-    {
-      "icon": "🧹",
-      "zh": "构建产物 / 开发垃圾",
-      "en": "Build output / dev junk",
-      "count": 2,
-      "bytes": 5799612,
-      "size_human": "5.53 MB",
+      "bytes": 10508320,
+      "size_human": "10.02 MB",
       "count_extra": 0
     },
     {

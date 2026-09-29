@@ -52,7 +52,7 @@ _EN: Dict[str, str] = {
     "清空本组": "Clear",
     "全选安全项": "Select safe",
     "清空选择": "Clear selection",
-    "移入回收站": "Move to Recycle Bin",
+    "移入备份目录": "Move to backup",
     "日志": "Log",
     "隐藏日志": "Hide log",
     "历史": "History",
@@ -117,6 +117,11 @@ _EN: Dict[str, str] = {
     "卸载失败": "Uninstall failed",
     "正在扫描残留…": "Scanning for leftovers…",
     "卸载完成": "Uninstall complete",
+    "卸载完成，无残留": "Uninstall complete, nothing left behind",
+    "已删除项已备份，可通过「回滚」恢复":
+        "Deleted items are backed up — restore them from Rollback.",
+    "清理中…": "Cleaning…",
+    "清选本组": "Clear selection in this group",
     "已卸载": "uninstalled",
     "未发现残留": "No leftovers found",
     "残留清理": "Leftover cleanup",
@@ -190,8 +195,8 @@ _EN: Dict[str, str] = {
 
     # ---- 标题 / 说明 ----
     "本地清理": "Local cleaner",
-    "本地独立清理 · 所有条目移入 Windows 回收站，可恢复":
-        "Standalone local cleaner · everything goes to the Recycle Bin, restorable",
+    "本地独立清理 · 文件先备份，7 天内可回滚":
+        "Standalone cleaner · backed up, 7-day rollback",
     "点击「开始扫描」查找可清理项":
         "Click Start scan to find reclaimable items",
     "HKCU 下 10 个「资源管理器使用记录」键":
@@ -204,19 +209,19 @@ _EN: Dict[str, str] = {
     "是注册表修改": " are registry changes",
     "其中包含批量删除，请注意条目数。":
         " This includes bulk deletion - mind the entry count.",
-    "文件类会移入回收站（可还原）。":
-        "Files go to the Recycle Bin (restorable).\n",
+    "文件类会先移入本地备份目录，7 天内可在「回滚」里还原。":
+        "Files are moved to a local backup directory and can be restored from Rollback for 7 days.\n",
     "注册表类会先备份 .reg 到": "Registry entries are backed up to",
     "再删除，导出失败则不会删除。还原方式：对备份目录里的 .reg 执行 reg import。":
         "before deletion; nothing is deleted if the export fails. "
         "To restore: run reg import on the .reg files in that folder.",
-    "将移入 Windows 回收站，可在「回收站」中还原。":
-        "These go to the Windows Recycle Bin; restore them from there.",
+    "将移入本地备份目录，可在「回滚」里还原。":
+        "These are moved to a local backup directory; restore them from Rollback.",
     "其中 ": "of which ",
     "项标记为「需确认」：": " flagged Needs review:",
     "注册表备份位置：": "Registry backups:",
-    "文件已进入回收站，清空回收站后才会真正释放空间。":
-        "Files are in the Recycle Bin - empty it to actually free disk space.",
+    "文件已移入备份目录，7 天后过期备份会自动清理。":
+        "Files are in the backup directory; expired backups are purged after 7 days.",
 
     # ---- 扫描分类（app.py 的 Scanner.category）----
     "已安装软件的安装包": "Installers of already-installed software",

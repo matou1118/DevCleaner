@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DevCleaner — find what you can safely delete</title>
-<meta name="description" content="A standalone Windows cleaner that shows its work. 10 evidence-based scanners, everything to the Recycle Bin, registry backed up before deletion. Open source.">
+<meta name="description" content="A standalone Windows cleaner that shows its work. 9 evidence-based scanners, files backed up with a 7-day rollback, registry backed up before deletion. Open source.">
 <meta property="og:title" content="DevCleaner — find what you can safely delete">
-<meta property="og:description" content="Evidence-based Windows cleaner. 10 scanners, Recycle Bin for files, .reg backup for the registry. Open source.">
+<meta property="og:description" content="Evidence-based Windows cleaner. 9 scanners, 7-day file rollback, .reg backup for the registry. Open source.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1117'/%3E%3Cpath d='M9 11h14M9 16h14M9 21h9' stroke='%237aa2f7' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -225,19 +225,19 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
 <!-- HERO -->
 <div class="wrap">
   <div class="hero">
-    <div class="badge rv"><span class="tag">v0.1.0</span> open source · CC BY-NC 4.0 · Windows</div>
+    <div class="badge rv"><span class="tag">v0.2.0</span> open source · CC BY-NC 4.0 · Windows</div>
     <h1 class="rv">Find what you can<br><span class="grad">safely delete.</span></h1>
     <p class="lede rv">A standalone cleaner that shows its work. Ten evidence-based scanners,
       every file to the Recycle&nbsp;Bin, registry backed up before it's touched — and a reason
       printed next to every single item.</p>
     <div class="cta rv">
-      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">
-        ⬇ Download v0.1.0</a>
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">
+        ⬇ Download v0.2.0</a>
       <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">
         <svg viewBox="0 0 16 16" style="width:17px;fill:currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
         Star on GitHub</a>
     </div>
-    <p class="meta rv">Single <b>34 MB</b> exe · no Python, Node, Java or browser needed · <b>42</b> self-tests</p>
+    <p class="meta rv">Single <b>33 MB</b> exe · no Python, Node, Java or browser needed · <b>75</b> self-tests</p>
 
     <div class="shot rv">
       <div class="bar"><i></i><i></i><i></i></div>
@@ -247,9 +247,9 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
 
     <div class="stats rv">
       <div class="stat"><div class="n" data-stat="total">—</div><div class="l">reclaimable on a real machine</div></div>
-      <div class="stat"><div class="n" data-stat="scanners">10</div><div class="l">evidence-based scanners</div></div>
+      <div class="stat"><div class="n" data-stat="scanners">9</div><div class="l">evidence-based scanners</div></div>
       <div class="stat"><div class="n">6</div><div class="l">colour themes, live switch</div></div>
-      <div class="stat"><div class="n" data-stat="tests">44</div><div class="l">self-tests, CI on 3.10–3.13</div></div>
+      <div class="stat"><div class="n" data-stat="tests">75</div><div class="l">self-tests, CI on 3.10–3.13</div></div>
     </div>
   </div>
 </div>
@@ -267,13 +267,16 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
       <p>An installer is only offered when the product name resolves <em>and</em> a matching process,
         install directory, or uninstall registry entry says it's already installed. One loose signal
         isn't enough.</p></div>
-    <div class="card rv"><div class="ico">♻️</div><h3>Files go to the Recycle Bin</h3>
-      <p>Deletion uses <code>SHFileOperation</code> with <code>FOF_ALLOWUNDO</code>. Mistake on
-        Tuesday? It's still in the Recycle Bin on Wednesday.</p></div>
+    <div class="card rv"><div class="ico">↺️</div><h3>Deleted, but reversible</h3>
+<p>Files move to a local backup directory you can roll back in one click for 7 days;
+expired backups are purged at startup. Nothing is hard-deleted.</p></div>
     <div class="card rv"><div class="ico">🛡️</div><h3>Registry backed up first</h3>
       <p>Registry keys are exported to a <code>.reg</code> file <em>before</em> deletion. If the
         export fails, the deletion is refused — never a silent edit.</p></div>
-    <div class="card rv"><div class="ico">🔒</div><h3>Your repos are untouchable</h3>
+    <div class="card rv"><div class="ico">🗑️</div><h3>Uninstall, then sweep</h3>
+  <p>Reads the installed-software list, runs the vendor's own uninstaller, then auto-scans
+  for leftovers (registry keys, install directory, AppData, shortcuts) to clear in one click.</p></div>
+  <div class="card rv"><div class="ico">🔒</div><h3>Your repos are untouchable</h3>
       <p>A Git clone with a <code>remote</code> never enters the deletable list. Only local clones
         with no remote are ever considered.</p></div>
     <div class="card rv"><div class="ico">⏱️</div><h3>Age and locks respected</h3>
@@ -309,7 +312,7 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
         <span>Exported to <code>.reg</code> first; if the export fails the delete is refused.
         Restore with <code>reg import</code>.</span></div></li>
       <li><span class="ck">✓</span><div><b>Files stay restorable</b>
-        <span>Recycle Bin all the way — nothing is hard-deleted behind your back.</span></div></li>
+        <span>Backed up all the way — nothing is hard-deleted behind your back, and it rolls back for 7 days.</span></div></li>
       <li><span class="ck">✓</span><div><b>Locked files are skipped</b>
         <span>Anything a running process holds open is reported instead of forced.</span></div></li>
       <li><span class="no">✕</span><div><b>No system directories</b>
@@ -359,7 +362,7 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
     <p style="color:var(--fg2);max-width:520px;margin:0 auto 28px">
       One exe, no install, no dependencies. Read the reasons it gives, then decide.</p>
     <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">⬇ Download v0.1.0</a>
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">⬇ Download v0.2.0</a>
       <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">Browse the source</a>
     </div>
   </div>
@@ -369,11 +372,11 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
   <b>attribution to Matou1118 required</b>, <b>non-commercial only</b>.
   <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">Full terms</a></p>
 <footer><div class="wrap foot">
-  <div>DevCleaner v0.1.0 · CC BY-NC 4.0 · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
+  <div>DevCleaner v0.2.0 · CC BY-NC 4.0 · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
   <nav style="display:flex;gap:20px">
     <a href="https://github.com/matou1118/DevCleaner">Source</a>
     <a href="https://github.com/matou1118/DevCleaner/releases">Releases</a>
-    <a href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">v0.1.0</a>
+    <a href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">v0.2.0</a>
     <a href="https://github.com/matou1118/DevCleaner/issues">Issues</a>
     <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">License</a>
   </nav>

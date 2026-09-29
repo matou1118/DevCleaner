@@ -505,7 +505,7 @@ class MainWindow(QMainWindow):
         titles.addWidget(_lbl("● DevCleaner", "title"))
         # 副标题给伸缩因子：英文比中文长一截，不设的话会被右边的下拉框压掉
         # 尾巴（中文下刚好不露，英文下就剩 "everything goes to the Recycl"）。
-        sub = _lbl(T("本地独立清理 · 所有条目移入 Windows 回收站，可恢复"), "subtitle")
+        sub = _lbl(T("本地独立清理 · 文件先备份，7 天内可回滚"), "subtitle")
         sub.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         titles.addWidget(sub)
         hl.addLayout(titles, 1)
@@ -607,7 +607,7 @@ class MainWindow(QMainWindow):
         b_all.clicked.connect(lambda: self.bulk(True))
         b_none = QPushButton(T("清空选择"))
         b_none.clicked.connect(lambda: self.bulk(False))
-        self.btn_clean = QPushButton(T("移入回收站"))
+        self.btn_clean = QPushButton(T("移入备份目录"))
         self.btn_clean.setObjectName("primary")
         self.btn_clean.setEnabled(False)
         self.btn_clean.clicked.connect(self.do_clean)

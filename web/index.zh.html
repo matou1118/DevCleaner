@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DevCleaner — 找出真正能安全删掉的东西</title>
-<meta name="description" content="Windows 本地独立清理工具。10 类判据驱动的扫描器，文件进回收站，注册表先备份再删，每一条都写明理由。开源。">
+<meta name="description" content="Windows 本地独立清理工具。9 类判据驱动的扫描器，文件先备份、7 天可回滚，注册表先备份再删，每一条都写明理由。开源。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1117'/%3E%3Cpath d='M9 11h14M9 16h14M9 21h9' stroke='%237aa2f7' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -180,17 +180,17 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
 
 <div class="wrap">
   <div class="hero">
-    <div class="badge rv"><span class="tag">v0.1.0</span> 开源 · CC BY-NC 4.0 · Windows</div>
+    <div class="badge rv"><span class="tag">v0.2.0</span> 开源 · CC BY-NC 4.0 · Windows</div>
     <h1 class="rv">找出真正能<br><span class="grad">安全删掉的东西</span></h1>
     <p class="lede rv">一个会把自己的判据摊开给你看的清理工具。十类判据驱动的扫描器，
-      文件进回收站，注册表删前先备份 —— 每一条旁边都写清楚为什么。</p>
+      删了能回滚，注册表删前先备份 —— 每一条旁边都写清楚为什么。</p>
     <div class="cta rv">
-      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">⬇ 下载 v0.1.0</a>
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">⬇ 下载 v0.2.0</a>
       <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">
         <svg viewBox="0 0 16 16" style="width:17px;fill:currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
         去 GitHub 点个星</a>
     </div>
-    <p class="meta rv">单个 <b>34 MB</b> exe · 不需要 Python / Node / Java / 浏览器 · <b>43</b> 项自检</p>
+    <p class="meta rv">单个 <b>33 MB</b> exe · 不需要 Python / Node / Java / 浏览器 · <b>75</b> 项自检</p>
 
     <div class="shot rv">
       <div class="bar"><i></i><i></i><i></i></div>
@@ -200,9 +200,9 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
 
     <div class="stats rv">
       <div class="stat"><div class="n" data-stat="total">—</div><div class="l">本机实测可回收</div></div>
-      <div class="stat"><div class="n" data-stat="scanners">10</div><div class="l">类判据驱动的扫描器</div></div>
+      <div class="stat"><div class="n" data-stat="scanners">9</div><div class="l">类判据驱动的扫描器</div></div>
       <div class="stat"><div class="n">6</div><div class="l">套配色主题，实时切换</div></div>
-      <div class="stat"><div class="n" data-stat="tests">44</div><div class="l">项自检，CI 覆盖 3.10–3.13</div></div>
+      <div class="stat"><div class="n" data-stat="tests">75</div><div class="l">项自检，CI 覆盖 3.10–3.13</div></div>
     </div>
   </div>
 </div>
@@ -216,11 +216,13 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
   <div class="feat">
     <div class="card rv"><div class="ico">🔍</div><h3>三角验证，不是猜</h3>
       <p>安装包只有在「产品名对得上」<em>并且</em>进程、安装目录、卸载注册表三者之一确认已安装时才进列表。单一信号不算数。</p></div>
-    <div class="card rv"><div class="ico">♻️</div><h3>文件进回收站</h3>
-      <p>删除走 <code>SHFileOperation</code> + <code>FOF_ALLOWUNDO</code>。周二手滑，周三还在回收站里。</p></div>
+    <div class="card rv"><div class="ico">↺️</div><h3>删了能回滚</h3>
+      <p>文件先移进本地备份目录，7 天内在界面上一键回滚；过期备份启动时自动清掉。</p></div>
     <div class="card rv"><div class="ico">🛡️</div><h3>注册表先备份</h3>
       <p>注册表键<em>先</em>导出成 <code>.reg</code> 再删。导出失败就拒绝删除 —— 绝不悄悄改你的注册表。</p></div>
-    <div class="card rv"><div class="ico">🔒</div><h3>你的仓库动不了</h3>
+    <div class="card rv"><div class="ico">🗑️</div><h3>软件卸载 + 残留清理</h3>
+      <p>读取已安装软件列表，跑它自带的卸载程序，然后自动扫描残留（注册表键 / 安装目录 / AppData / 快捷方式），一键清掉。</p></div>
+      <div class="card rv"><div class="ico">🔒</div><h3>你的仓库动不了</h3>
       <p>带 <code>remote</code> 的 Git 仓库永远不进可删列表。只有没有远程地址的本地 clone 才会被考虑。</p></div>
     <div class="card rv"><div class="ico">⏱️</div><h3>尊重时间与占用</h3>
       <p>过期临时文件要先满足最小天数。被运行中的进程占着的，会跳过并报告，不会硬来。</p></div>
@@ -231,7 +233,7 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
 
 <section id="scanners"><div class="wrap">
   <div class="sec-head rv">
-    <div class="eyebrow">十个扫描器</div>
+    <div class="eyebrow">九个扫描器</div>
     <h2>它到底在找什么</h2>
     <p>字节没意义的按条目数显示 —— 注册表和空文件这两类显示条目数量，不拿假 gigabyte 糊弄你。</p>
   </div>
@@ -249,7 +251,7 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
       <li><span class="ck">✓</span><div><b>注册表绝不盲删</b>
         <span>先导出 <code>.reg</code>，导出失败就拒绝删除。还原执行 <code>reg import</code>。</span></div></li>
       <li><span class="ck">✓</span><div><b>文件可还原</b>
-        <span>全程走回收站 —— 不会在你背后硬删。</span></div></li>
+        <span>全程先备份 —— 不会在你背后硬删，而且 7 天内可回滚。</span></div></li>
       <li><span class="ck">✓</span><div><b>被占用的跳过</b>
         <span>运行中进程占着的文件会被报告，而不是硬来。</span></div></li>
       <li><span class="no">✕</span><div><b>不扫系统目录</b>
@@ -295,7 +297,7 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
     <p style="color:var(--fg2);max-width:540px;margin:0 auto 28px">
       单个 exe，不装环境，不装依赖。先读它给出的理由，再决定删不删。</p>
     <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">⬇ 下载 v0.1.0</a>
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">⬇ 下载 v0.2.0</a>
       <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">看看源码</a>
     </div>
   </div>
@@ -305,11 +307,11 @@ footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px
   <b>必须署名 Matou1118</b>，<b>不允许商用</b>。
   <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">条款全文 · Full terms</a></p>
 <footer><div class="wrap foot">
-  <div>DevCleaner v0.1.0 · CC BY-NC 4.0 · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
+  <div>DevCleaner v0.2.0 · CC BY-NC 4.0 · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
   <nav style="display:flex;gap:20px">
     <a href="https://github.com/matou1118/DevCleaner">源码</a>
     <a href="https://github.com/matou1118/DevCleaner/releases">版本发布</a>
-    <a href="https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0">v0.1.0</a>
+    <a href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">v0.2.0</a>
     <a href="https://github.com/matou1118/DevCleaner/issues">问题反馈</a>
     <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">许可证</a>
   </nav>

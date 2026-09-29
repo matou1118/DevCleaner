@@ -1122,11 +1122,12 @@ def t_web_site():
         assert cls in nf, f"404 缺 {cls} 那一套文案"
 
     # 仓库链接必须在，且必须都指向 matou1118/DevCleaner（防止写错成别人仓库）。
-    # 用子串包含而不是集合相等：/releases/tag/v0.1.0 也算命中 /releases。
+    # 用子串包含而不是集合相等：/releases/tag/v0.2.0 也算命中 /releases。
+    # 下载链接的版本号从 app.__version__ 派生，写死的话每次升版必红。
     blob = " ".join(_re.findall(r"https://github\.com/([\w.\-/]+)", idx))
     for want in ("matou1118/DevCleaner",
                  "matou1118/DevCleaner/releases",
-                 "matou1118/DevCleaner/releases/tag/v0.1.0",
+                 "matou1118/DevCleaner/releases/tag/v" + app.__version__,
                  "matou1118/DevCleaner/issues"):
         assert want in blob, f"英文首页少了链接: {want}"
     others = [u for u in _re.findall(r"https://github\.com/([\w.\-]+)/", idx)
@@ -1175,11 +1176,18 @@ def t_web_site():
         assert "Matou1118" in t, f"web/{name} 没写署名"
         assert "LICENSE" in t, f"web/{name} 没链到许可全文"
 
-    # 关键卖点必须在两版上都在，不能被改没了
-    for phrase in ("Recycle Bin",):
-        assert phrase in idx, f"英文首页少了关键信息: {phrase}"
-    for phrase in ("回收站",):
+    # 关键卖点必须在两版上都在，不能被改没。
+    # 0.2.0 起文件不再走回收站，改成备份目录 + 7 天回滚，所以盯的是「可回滚」
+    # 这个承诺。原来这里写死 "Recycle Bin"：代码早就不是那样了，站上也跟着
+    # 一起错，测试却一直在放行。
+    for phrase in ("reversible", "rollback"):
+        assert phrase in idx.lower(), f"英文首页少了关键信息: {phrase}"
+    for phrase in ("回滚",):
         assert phrase in zh, f"中文首页少了关键信息: {phrase}"
+    # 旧说法不许复活：文件已经不走回收站，站上再这么写就是在骗用户
+    for _n, _p in (("index.html", idx), ("index.zh.html", zh)):
+        assert "Recycle Bin" not in _p and "回收站" not in _p, \
+            f"{_n} 还在说回收站，0.2.0 起文件走备份目录 + 7 天回滚"
 
     # 数字不许写死在 HTML 里：必须来自 stats.json（跑真实扫描生成）。
     # 写死的话机器上多删一个缓存，页面就开始说谎。
@@ -1648,6 +1656,31 @@ def t_path_safety_env():
         shutil.rmtree(own, ignore_errors=True)
 
 
+# ---------------- 界面文案 i18n ----------------
+def t_i18n_no_cjk_leftover():
+    """英文模式下 T() 的输出里不能残留中文。
+
+    T() 是子串替换，词条按长度降序匹配，所以一段长句只要有一部分没收进翻译表，
+    就会输出「前半截英文 + 后半截中文」的混排。0.2.0 就这么漏出过
+    「Deleteditems已备份，可通过Rollback恢复」。lang.missing() 早就写好了，
+    但它返回的是「译文与原文相同」的条目，噪声太大、没人调用 —— 真正该管的是
+    「输出里还有没有中文」。
+    """
+    import io as _io
+    import re as _re
+    import lang as _lang
+    g = _io.open(Path(__file__).parent / "gui.py", encoding="utf-8").read()
+    used = sorted(set(_re.findall(r'T\("((?:[^"\\]|\\.)*)"\)', g)))
+    assert used, "没抓到任何 T() 调用，正则可能失效了"
+    cjk = _re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")
+    old, _lang.LANG = _lang.LANG, "en"
+    try:
+        bad = [(x, _lang.T(x)) for x in used if cjk.search(_lang.T(x))]
+    finally:
+        _lang.LANG = old
+    assert not bad, "英文模式残留中文: " + "; ".join("%r -> %r" % b for b in bad)
+
+
 # ---------------- 文件备份与回滚 ----------------
 def t_safe_delete_backup():
     """safe_delete + 备份目录：文件移入备份、manifest 正确、可回滚"""
@@ -2035,6 +2068,7 @@ if __name__ == "__main__":
         check("exe 自带 Python（无解释器也能跑）", t_exe_standalone_no_python)
         check("-c 分类过滤器（旁路+不泄漏）", t_category_filter)
         check("审计日志写入", t_audit_log)
+        check("英文模式无中文残留", t_i18n_no_cjk_leftover)
         check("删除路径安全校验", t_path_safety)
         check("删除路径安全校验：认环境变量而非写死 C:", t_path_safety_env)
         check("文件备份+回滚", t_safe_delete_backup)
