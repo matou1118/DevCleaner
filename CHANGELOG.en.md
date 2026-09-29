@@ -39,7 +39,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 - Audit log: every cleanup appends to `%LOCALAPPDATA%/DevCleaner/clean_history.log`; new "History" button in the GUI footer.
 - `settings.yaml` personal paths replaced with generic `%VAR%` examples.
-- Self-test: 35 checks → 75.
+- Self-test: 35 checks → 76.
 
 ---
 

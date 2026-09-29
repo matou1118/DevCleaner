@@ -1184,6 +1184,16 @@ def t_web_site():
         assert phrase in idx.lower(), f"英文首页少了关键信息: {phrase}"
     for phrase in ("回滚",):
         assert phrase in zh, f"中文首页少了关键信息: {phrase}"
+    # 自检项数不许各处手写漂移：页面写死的兜底值必须等于 test_app.py 的注册数。
+    # 这轮它漂过好几回（站点 43/44、changelog 75、实际 76）。
+    import re as _re2
+    n_checks = len(_re2.findall(r"(?m)^\s*check\(", Path(__file__).read_text(encoding="utf-8")))
+    for _pn, _pg in (("index.html", idx), ("index.zh.html", zh)):
+        _m = _re.search(r'data-stat="tests">(\d+)<', _pg)
+        assert _m, f"{_pn} 缺 data-stat=\"tests\" 占位"
+        assert int(_m.group(1)) == n_checks, \
+            f"{_pn} 写的自检数 {_m.group(1)} != 实际注册数 {n_checks}"
+
     # 旧说法不许复活：文件已经不走回收站，站上再这么写就是在骗用户
     for _n, _p in (("index.html", idx), ("index.zh.html", zh)):
         assert "Recycle Bin" not in _p and "回收站" not in _p, \

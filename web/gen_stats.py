@@ -7,6 +7,7 @@
     python web/gen_stats.py
 """
 import json
+import re
 import os
 import sys
 from pathlib import Path
@@ -28,6 +29,16 @@ SCAN_CN = {
     "空文件 / 空目录 / 断链": ("Empty files / empty dirs / broken links", "∅"),
     "未分类": ("Uncategorised", "●"),
 }
+
+
+def count_self_tests() -> int:
+    """数 test_app.py 里注册了多少项自检。
+
+    页面上「N 项自检」这个数字手写过好几个地方，一路漂到了和实际对不上
+    （站点 43/44、changelog 75、实际 76）。这里数注册行，页面和自检都读它。
+    """
+    src = (ROOT / "test_app.py").read_text(encoding="utf-8")
+    return len(re.findall(r"(?m)^\s*check\(", src))
 
 
 def main() -> int:
@@ -67,6 +78,8 @@ def main() -> int:
         "safe_human": engine.human(safe),
         "caution_human": engine.human(caution),
         "scanners": len(engine.SCANNERS),
+        # 自检项数也必须来自真实文件，不能各处手写
+        "tests": count_self_tests(),
         "extra_by_count": n_count,
         "categories": cats,
     }
@@ -75,6 +88,7 @@ def main() -> int:
     print(f"wrote {out.relative_to(ROOT)}")
     print(f"  total  {data['total_human']}  ({n_count} items counted per entry)")
     print(f"  cats   {len(cats)} with findings, {len(engine.SCANNERS)} scanners")
+    print(f"  tests  {data['tests']}")
     for c in cats:
         print(f"    {c['icon']} {c['size_human']:>10}  {c['zh']}")
     return 0

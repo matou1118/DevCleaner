@@ -88,7 +88,7 @@ python app.py                # 无界面：跑一次扫描并打印结果
 python app.py --json         # JSON 输出（给脚本用）
 python app.py -c "注册表"     # 只跑某一类
 python gui.py                # 原生界面
-python test_app.py           # 52 项自检
+python test_app.py           # 76 项自检
 build.bat                    # 自检 -> 清理 -> PyInstaller onefile -> 复制 settings.yaml
 ```
 

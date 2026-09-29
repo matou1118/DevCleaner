@@ -39,10 +39,9 @@
 
 - 审计日志：每次清理写入 `%LOCALAPPDATA%/DevCleaner/clean_history.log`，GUI 底栏新增"历史"按钮查看
 - settings.yaml 个人路径替换为通用示例
-- 自检从 35 项增至 75 项
+- 自检从 35 项增至 76 项
 
 ---
-
 ## [0.1.0] — 2026-09-28
 
 首个公开版本。Windows 11 / 24 盘实测。

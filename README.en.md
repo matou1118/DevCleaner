@@ -90,7 +90,7 @@ python app.py                # headless: run a scan and print results
 python app.py --json         # JSON output (for scripts)
 python app.py -c "registry"  # run one category only
 python gui.py                # native window
-python test_app.py           # 35 self-checks
+python test_app.py           # 76 self-checks
 build.bat                    # self-check -> clean -> PyInstaller onefile -> copy config
 ```
 
