@@ -2,7 +2,7 @@
 DevCleaner - 本地独立清理工具
 扫描引擎：纯标准库 + psutil + PyYAML，不含任何界面代码（界面见 gui.py）。
 """
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 APP_NAME = "DevCleaner"
 REPO_OWNER = "matou1118"
 REPO_NAME = "DevCleaner"
@@ -14,6 +14,7 @@ import fnmatch
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -336,6 +337,14 @@ def to_recycle_bin(path_str: str) -> Tuple[bool, str]:
     p = Path(path_str)
     if not p.exists():
         return False, "文件不存在"
+    # 纵深防御：绝不删系统目录内的文件，即使扫描器误报也不执行。
+    # 取自环境变量而不是写死 C: —— Windows 装在 D 盘时写死 C: 等于没保护。
+    for sd in (expand("%SystemRoot%/"), expand("%ProgramFiles%/"),
+               expand("%ProgramFiles(x86)%/")):
+        if not sd or sd.startswith("%"):
+            continue          # 环境变量缺失，别拿字面量当路径比
+        if _in_dir(p, Path(sd)):
+            return False, f"拒绝：路径在系统目录 {sd} 内"
     ops = _SHFILEOPSTRUCTW()
     ops.hwnd = 0
     ops.wFunc = FO_DELETE
@@ -1358,6 +1367,454 @@ def backup_root() -> Path:
     return d
 
 
+def audit_log_path() -> Path:
+    """清理审计日志路径（不自动创建目录，写时再建）。"""
+    return Path(expand("%LOCALAPPDATA%/DevCleaner/clean_history.log"))
+
+
+def audit_log(action: str, detail: str) -> None:
+    """追加写一行清理审计日志。永不抛异常 —— 日志失败不能影响清理流程。
+
+    action: OK / FAIL / BACKUP / SKIP
+    detail: 自由文本，含条目名、路径、结果等
+    """
+    try:
+        p = audit_log_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with p.open("a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {action} | {detail}\n")
+    except OSError:
+        pass
+
+
+# ============================ 文件备份与回滚 ============================
+
+def file_backup_root() -> Path:
+    """文件备份根目录（用于回滚）。"""
+    d = Path(expand("%LOCALAPPDATA%/DevCleaner/file_backups"))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def create_backup_session() -> Tuple[Path, str]:
+    """创建一个备份会话目录，返回 (目录路径, 会话ID)。"""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    d = file_backup_root() / stamp
+    # 避免同秒冲突
+    n = 1
+    while d.exists():
+        d = file_backup_root() / f"{stamp}_{n}"
+        n += 1
+    d.mkdir(parents=True, exist_ok=True)
+    return d, d.name
+
+
+def safe_delete(path_str: str, backup_dir: Path = None) -> Tuple[bool, str]:
+    """安全删除：有 backup_dir 则移入备份目录（可回滚），否则走回收站。
+
+    返回 (成功, 消息)。消息以 "BACKEDUP:" 前缀表示走了备份路径。
+    """
+    p = Path(path_str)
+    if not p.exists():
+        return False, "文件不存在"
+    # 纵深防御：绝不删系统目录内的文件
+    for sd in (Path("C:/Windows"), Path("C:/Program Files"),
+               Path("C:/Program Files (x86)")):
+        if _in_dir(p, sd):
+            return False, f"拒绝：路径在系统目录 {sd} 内"
+
+    if backup_dir is not None:
+        dest = backup_dir / p.name
+        n = 1
+        while dest.exists():
+            dest = backup_dir / f"{p.stem}_{n}{p.suffix}"
+            n += 1
+        try:
+            shutil.move(str(p), str(dest))
+            # 追加写 manifest
+            manifest = backup_dir / "manifest.json"
+            entries: list = []
+            if manifest.is_file():
+                try:
+                    entries = json.loads(manifest.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    pass
+            entries.append({"original": str(p), "backup": str(dest),
+                            "name": p.name, "size": p.stat().st_size if p.exists() else 0})
+            manifest.write_text(json.dumps(entries, ensure_ascii=False, indent=2),
+                                encoding="utf-8")
+            return True, f"BACKEDUP:{dest.parent.name}/{dest.name}"
+        except OSError:
+            # 备份失败，降级走回收站
+            return to_recycle_bin(path_str)
+    return to_recycle_bin(path_str)
+
+
+def list_backup_sessions() -> List[dict]:
+    """列出所有备份会话，按时间倒序。每项含 id/count/size/entries。"""
+    root = file_backup_root()
+    sessions = []
+    for d in root.iterdir():
+        if not d.is_dir():
+            continue
+        manifest = d / "manifest.json"
+        if not manifest.is_file():
+            continue
+        try:
+            entries = json.loads(manifest.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        total = 0
+        for e in entries:
+            try:
+                total += Path(e["backup"]).stat().st_size
+            except OSError:
+                pass
+        sessions.append({"id": d.name, "count": len(entries),
+                         "size": total, "entries": entries})
+    sessions.sort(key=lambda s: s["id"], reverse=True)
+    return sessions
+
+
+def restore_backup_session(session_id: str) -> Tuple[int, int, List[str]]:
+    """回滚一个备份会话，返回 (成功数, 失败数, 失败详情列表)。"""
+    d = file_backup_root() / session_id
+    manifest = d / "manifest.json"
+    if not manifest.is_file():
+        return 0, 0, ["备份记录不存在"]
+    try:
+        entries = json.loads(manifest.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        return 0, 0, [f"读取备份记录失败: {e}"]
+    ok, fail = 0, 0
+    errs: List[str] = []
+    for e in entries:
+        bp, op = Path(e["backup"]), Path(e["original"])
+        if not bp.exists():
+            fail += 1
+            errs.append(f"{e['name']}（备份文件已不存在）")
+            continue
+        if op.exists():
+            fail += 1
+            errs.append(f"{e['name']}（原路径已有文件）")
+            continue
+        try:
+            op.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(bp), str(op))
+            ok += 1
+        except OSError as ex:
+            fail += 1
+            errs.append(f"{e['name']}（{ex}）")
+    if fail == 0:
+        shutil.rmtree(d, ignore_errors=True)
+    return ok, fail, errs
+
+
+def cleanup_old_backups(max_days: int = 7) -> int:
+    """清理超过 max_days 天的备份会话，返回清理数量。"""
+    root = file_backup_root()
+    cutoff = datetime.now().timestamp() - max_days * 86400
+    count = 0
+    for d in root.iterdir():
+        if not d.is_dir():
+            continue
+        try:
+            if d.stat().st_mtime < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+                count += 1
+        except OSError:
+            pass
+    return count
+
+
+# ============================ 软件卸载与残留清理 ============================
+
+@dataclass
+class InstalledSoftware:
+    """已安装软件信息（从卸载注册表读取）。"""
+    name: str               # DisplayName
+    publisher: str          # Publisher
+    version: str            # DisplayVersion
+    size_mb: int            # EstimatedSize (MB) 或 0
+    uninstall_string: str   # UninstallString（交互式）
+    quiet_string: str       # QuietUninstallString（静默，可能没有）
+    install_location: str   # InstallLocation
+    reg_hive: str           # "HKLM" / "HKCU"
+    reg_key: str            # 完整子键路径
+    last_used: float = 0.0  # 上次使用时间戳（0 = 未知）
+
+
+def _last_used_time(name: str, install_location: str = "",
+                    uninstall_string: str = "") -> float:
+    """探测软件上次使用时间。
+
+    取多个来源的最 recent 值（越新越说明用过）：
+    1. 主 exe 的 st_atime（最后访问时间，启动时更新）
+    2. %APPDATA%/%LOCALAPPDATA% 下软件目录的 st_mtime（写配置/数据时更新）
+    3. 开始菜单快捷方式的 st_atime（点击时更新）
+    4. InstallLocation 目录的 st_mtime
+
+    返回 Unix 时间戳，0.0 表示探测不到。
+    """
+    import glob as _glob
+    norm = name.lower()
+    best = 0.0
+
+    def _try_atime(path: str):
+        nonlocal best
+        try:
+            st = os.stat(path)
+            if st.st_atime > best:
+                best = st.st_atime
+        except OSError:
+            pass
+
+    def _try_mtime(path: str):
+        nonlocal best
+        try:
+            st = os.stat(path)
+            if st.st_mtime > best:
+                best = st.st_mtime
+        except OSError:
+            pass
+
+    # 1. 主 exe 的最后访问时间
+    exe_candidates: List[str] = []
+    if uninstall_string:
+        m = re.match(r'"([^"]+)"', uninstall_string)
+        if m:
+            exe_candidates.append(m.group(1))
+        else:
+            parts = uninstall_string.split(None, 1)
+            if parts:
+                exe_candidates.append(parts[0])
+    if install_location and os.path.isdir(install_location):
+        # 找 InstallLocation 下的 .exe（取修改时间最新的那个）
+        try:
+            for f in _glob.glob(os.path.join(install_location, "*.exe")):
+                _try_atime(f)
+        except OSError:
+            pass
+        _try_mtime(install_location)
+    for exe in exe_candidates:
+        if os.path.isfile(exe):
+            _try_atime(exe)
+
+    # 2. AppData / LocalAppData 下软件目录的 mtime
+    for env in ("%APPDATA%", "%LOCALAPPDATA%", "%PROGRAMDATA%"):
+        base = expand(env)
+        try:
+            for d in os.listdir(base):
+                if norm in d.lower():
+                    _try_mtime(os.path.join(base, d))
+        except OSError:
+            pass
+
+    # 3. 开始菜单快捷方式的 atime
+    for env in ("%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs",
+                "%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs"):
+        base = expand(env)
+        try:
+            for f in _glob.glob(os.path.join(base, "**", "*.lnk"), recursive=True):
+                if norm in os.path.basename(f).lower():
+                    _try_atime(f)
+        except OSError:
+            pass
+
+    return best
+
+
+def list_installed_software() -> List[InstalledSoftware]:
+    """列出所有已安装软件（有 UninstallString 且卸载程序存在的）。"""
+    out: List[InstalledSoftware] = []
+    for hive, branch in UNINSTALL_BRANCHES:
+        try:
+            with winreg.OpenKey(hive, branch) as b:
+                i = 0
+                while True:
+                    try:
+                        name = winreg.EnumKey(b, i)
+                    except OSError:
+                        break
+                    i += 1
+                    full = branch + "\\" + name
+                    dn = _value(hive, full, "DisplayName")
+                    if not dn:
+                        continue
+                    us = _value(hive, full, "UninstallString")
+                    if not us:
+                        continue
+                    # 跳过系统更新和补丁
+                    if dn.startswith("KB") and dn[2:7].isdigit():
+                        continue
+                    pub = _value(hive, full, "Publisher") or ""
+                    ver = _value(hive, full, "DisplayVersion") or ""
+                    il = _value(hive, full, "InstallLocation") or ""
+                    qs = _value(hive, full, "QuietUninstallString") or ""
+                    sz = 0
+                    try:
+                        raw = _value(hive, full, "EstimatedSize")
+                        if raw:
+                            sz = int(int(raw) / 1024)  # KB → MB
+                    except (TypeError, ValueError):
+                        pass
+                    out.append(InstalledSoftware(
+                        name=dn, publisher=pub, version=ver, size_mb=sz,
+                        uninstall_string=us, quiet_string=qs,
+                        install_location=il, reg_hive=_hname(hive),
+                        reg_key=full,
+                        last_used=_last_used_time(dn, il, us)))
+        except OSError:
+            continue
+    # 去重（同一软件可能在 HKLM 和 WOW6432Node 各出现一次）
+    seen: set = set()
+    deduped: List[InstalledSoftware] = []
+    for s in sorted(out, key=lambda x: x.name.lower()):
+        key = s.name.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(s)
+    return deduped
+
+
+def run_uninstaller(uninstall_string: str, wait: bool = True) -> Tuple[bool, str]:
+    """运行软件的卸载程序。
+
+    uninstall_string 通常是 'C:\\path\\uninst.exe' 或
+    'MsiExec.exe /X{GUID}'。需要解析出 exe 和参数。
+    返回 (成功, 消息)。
+    """
+    if not uninstall_string:
+        return False, "无卸载命令"
+    # 解析命令行：带引号的 exe 或第一个 token
+    m = re.match(r'"([^"]+)"(.*)', uninstall_string)
+    if m:
+        exe, args = m.group(1), m.group(2).strip()
+    else:
+        parts = uninstall_string.split(None, 1)
+        exe = parts[0]
+        args = parts[1] if len(parts) > 1 else ""
+    # 卸载命令常只写 exe 名（MSI 制软件一律是 `MsiExec.exe /X{GUID}`），
+    # 而 os.path.exists("MsiExec.exe") 恒为 False —— 那样会把一大半软件的
+    # 卸载误报成「卸载程序不存在」。带目录分隔符的路径 which() 会直接校验，
+    # 不存在的路径仍然返回 None，行为不变。
+    exe = shutil.which(exe) or exe
+    if not os.path.exists(exe):
+        return False, f"卸载程序不存在: {exe}"
+    try:
+        cmd = [exe] + (args.split() if args else [])
+        p = subprocess.Popen(cmd, creationflags=_no_window())
+        if wait:
+            p.wait()
+        return True, f"卸载程序已启动 (PID={p.pid})"
+    except OSError as e:
+        return False, str(e)
+
+
+def find_residuals(name: str, install_location: str = "") -> dict:
+    """卸载后查找残留。
+
+    搜索范围：
+    - 注册表：HKLM\\SOFTWARE 和 HKCU\\SOFTWARE 下含软件名的键
+    - 文件目录：InstallLocation、%APPDATA%\\<name>、%LOCALAPPDATA%\\<name>
+    - 快捷方式：Start Menu 和 Desktop 下的 .lnk 含软件名
+
+    返回 {"registry": [...], "folders": [...], "shortcuts": [...]}
+    """
+    import glob as _glob
+    norm = name.lower()
+    result: dict = {"registry": [], "folders": [], "shortcuts": []}
+
+    # 1. 注册表残留：搜索 SOFTWARE 分支下含软件名的键
+    for hive, label in [(winreg.HKEY_LOCAL_MACHINE, "HKLM"),
+                         (winreg.HKEY_CURRENT_USER, "HKCU")]:
+        try:
+            with winreg.OpenKey(hive, r"SOFTWARE") as sk:
+                i = 0
+                while True:
+                    try:
+                        sub = winreg.EnumKey(sk, i)
+                    except OSError:
+                        break
+                    i += 1
+                    if norm in sub.lower():
+                        result["registry"].append(f"{label}\\SOFTWARE\\{sub}")
+        except OSError:
+            pass
+
+    # 2. 文件目录残留
+    candidates: List[str] = []
+    if install_location and os.path.isdir(install_location):
+        candidates.append(install_location)
+    for env in ("%APPDATA%", "%LOCALAPPDATA%", "%PROGRAMDATA%"):
+        base = expand(env)
+        # 精确匹配
+        p = os.path.join(base, name)
+        if os.path.isdir(p):
+            candidates.append(p)
+        # 模糊匹配：目录名含软件名
+        try:
+            for d in os.listdir(base):
+                if norm in d.lower() and os.path.isdir(os.path.join(base, d)):
+                    full = os.path.join(base, d)
+                    if full not in candidates:
+                        candidates.append(full)
+        except OSError:
+            pass
+    result["folders"] = candidates
+
+    # 3. 快捷方式残留
+    for env in ("%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs",
+                "%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs",
+                "%USERPROFILE%\\Desktop"):
+        base = expand(env)
+        try:
+            for f in _glob.glob(os.path.join(base, "**", "*.lnk"), recursive=True):
+                if norm in os.path.basename(f).lower():
+                    result["shortcuts"].append(f)
+        except OSError:
+            pass
+
+    return result
+
+
+def clean_residuals(residuals: dict, backup_dir: Path = None) -> dict:
+    """清理残留项。返回 {"deleted": int, "failed": int, "details": [...]}。"""
+    deleted = failed = 0
+    details: List[str] = []
+
+    # 清理目录
+    for folder in residuals.get("folders", []):
+        if os.path.isdir(folder):
+            ok, msg = safe_delete(folder, backup_dir=backup_dir)
+            if ok:
+                deleted += 1
+                details.append(f"✓ {folder}")
+            else:
+                failed += 1
+                details.append(f"✗ {folder} ({msg})")
+
+    # 清理快捷方式
+    for lnk in residuals.get("shortcuts", []):
+        if os.path.isfile(lnk):
+            ok, msg = safe_delete(lnk, backup_dir=backup_dir)
+            if ok:
+                deleted += 1
+                details.append(f"✓ {lnk}")
+            else:
+                failed += 1
+                details.append(f"✗ {lnk} ({msg})")
+
+    # 注册表残留：只记录，不自动删（风险太高，需用户确认）
+    reg_count = len(residuals.get("registry", []))
+    if reg_count:
+        details.append(f"⚠ 注册表残留 {reg_count} 项（需手动确认）")
+
+    return {"deleted": deleted, "failed": failed, "details": details,
+            "reg_pending": reg_count}
+
+
 def _hive_root(hive: int) -> str:
     return {winreg.HKEY_CURRENT_USER: "HKEY_CURRENT_USER",
             winreg.HKEY_LOCAL_MACHINE: "HKEY_LOCAL_MACHINE",
@@ -1671,8 +2128,16 @@ SCANNERS: List[Scanner] = [
 # ============================ 扫描调度 ============================
 
 
-def run_scan(on_progress: Optional[Callable[[str, float], None]] = None) -> None:
-    """on_progress(stage, 0..1) 供界面线程消费。本函数在扫描线程里跑。"""
+# 旁路数据源产生的分类 —— 不在 SCANNERS 列表里，但 run_scan 会直接注入。
+# -c 过滤器和「可选」列表都必须感知它们，否则用户选不中、或单分类结果泄漏。
+BYPASS_CATEGORIES: List[str] = ["注册表 · 可安全重置", "注册表 · 失效程序"]
+
+
+def run_scan(on_progress: Optional[Callable[[str, float], None]] = None,
+             category_filter: Optional[str] = None) -> None:
+    """on_progress(stage, 0..1) 供界面线程消费。本函数在扫描线程里跑。
+    category_filter 非空时，扫描后按关键词过滤 items/notes，确保旁路数据源
+    （注册表、git clone 候选）也遵守 -c 筛选，不泄漏到单分类结果里。"""
     def emit(stage: str, p: float) -> None:
         STATE.stage = stage
         STATE.progress = p
@@ -1718,6 +2183,20 @@ def run_scan(on_progress: Optional[Callable[[str, float], None]] = None) -> None
         dropped = before - len(STATE.items)
         if dropped:
             STATE.say(f"已忽略 {dropped} 个小于 {human(minsz)} 的条目")
+        # -c 后过滤：确保旁路数据源（注册表/git clone）也遵守分类筛选，
+        # 不泄漏到单分类结果里。这是 -c 缺陷的根因修复。
+        if category_filter:
+            before = len(STATE.items)
+            STATE.items[:] = [i for i in STATE.items
+                              if category_filter in i.category]
+            STATE.notes[:] = [n for n in STATE.notes
+                              if category_filter in (n.kind or "")
+                              or category_filter in (n.name or "")]
+            dropped2 = before - len(STATE.items)
+            if dropped2:
+                STATE.say(
+                    f"分类过滤：保留 {len(STATE.items)} 项"
+                    f"（排除 {dropped2} 项不匹配 '{category_filter}'）")
         STATE.say(f"扫描完成，共 {len(STATE.items)} 个可清理项")
     except Exception as err:                              # noqa: BLE001
         STATE.say(f"[异常] {type(err).__name__}: {err}")
@@ -1766,13 +2245,16 @@ if __name__ == "__main__":
 
     if _a.category:
         keep = [s for s in SCANNERS if _a.category in s.category]
-        if not keep:
+        bypass_hit = any(_a.category in c for c in BYPASS_CATEGORIES)
+        if not keep and not bypass_hit:
             print(f"没有匹配 '{_a.category}' 的分类。可选：")
             for s in SCANNERS:
                 print("  " + s.category)
+            for c in BYPASS_CATEGORIES:
+                print("  " + c)
             sys.exit(2)
         SCANNERS[:] = keep
-    run_scan()
+    run_scan(category_filter=_a.category)
 
     if _a.json:
         import json as _json

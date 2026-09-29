@@ -17,6 +17,32 @@
 
 ---
 
+## [0.2.0] — 2026-09-29
+
+### 新增 · 安全
+
+- **清理预览**：确认弹窗在文件列表前展示分类汇总（条目数 + 空间）和风险分解（安全/需确认），用户一眼看清将删什么
+- **清理回滚**：文件类删除从"移入回收站"改为"移入本地备份目录"，7 天内可一键回滚；启动时自动清理过期备份
+- **系统目录安全校验**：`to_recycle_bin` 纵深防御，拒绝删除 `C:\Windows`、`C:\Program Files` 内的文件
+
+### 新增 · 卸载
+
+- **软件卸载**：读取已安装软件列表，运行官方卸载程序后自动扫描残留（注册表键、安装目录、AppData、快捷方式），可一键清理
+- **残留清理**：卸载后搜索注册表 `SOFTWARE` 分支、`%APPDATA%`、`%LOCALAPPDATA%`、Start Menu 快捷方式中与软件名匹配的残留项
+
+### 修复
+
+- `-c` 分类过滤器缺陷：旁路分类（注册表/Git/npm）现在能被正确选中且不泄漏其他分类
+- GUI 重复代码块清理（2 处重复进度回调 + 结果汇总）
+
+### 改进
+
+- 审计日志：每次清理写入 `%LOCALAPPDATA%/DevCleaner/clean_history.log`，GUI 底栏新增"历史"按钮查看
+- settings.yaml 个人路径替换为通用示例
+- 自检从 35 项增至 75 项
+
+---
+
 ## [0.1.0] — 2026-09-28
 
 首个公开版本。Windows 11 / 24 盘实测。
@@ -96,7 +122,7 @@ cmd 按 OEM 代码页读 `.bat`，中文和 `&` 组合会被误解析成不存�
 
 ### 测试
 
-35 项自检，`python test_app.py`。重点覆盖：
+ 52 项自检，`python test_app.py`。重点覆盖：
 
 - 离屏构建界面、6 套主题逐一切换
 - 注册表完整往返：建键 → 备份 → 删除 → `reg import` 还原 → 校验数据一致
@@ -112,5 +138,6 @@ cmd 按 OEM 代码页读 `.bat`，中文和 `&` 组合会被误解析成不存�
 - 版本号与 CHANGELOG / README 同步、20 个开源必需文件齐全、无占位符残留
 - 仓库链接用户名一致、所有本地图片引用有效
 
-[未发布]: https://github.com/matou1118/DevCleaner/compare/v0.1.0...HEAD
+[未发布]: https://github.com/matou1118/DevCleaner/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0
 [0.1.0]: https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0

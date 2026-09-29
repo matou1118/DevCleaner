@@ -7,7 +7,7 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-E0af68.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://learn.microsoft.com/windows/)
 
-**当前版本 v0.1.0** · [English](README.en.md) · [📖 使用说明](docs/usage.md) · [📷 全部截图](docs/Screenshots.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
+**当前版本 v0.2.0** · [English](README.en.md) · [📖 使用说明](docs/usage.md) · [📷 全部截图](docs/Screenshots.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
 
 打开即自动扫描。分类默认全部折叠，一屏就能看完所有分类和它们的大小；要细看某一项再展开，或点「全部展开」。
 
@@ -49,11 +49,16 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 
 | 类型 | 行为 |
 |---|---|
-| 普通文件 | 走 `SHFileOperationW` + `FOF_ALLOWUNDO`，**进回收站**，可还原 |
+| 普通文件 | **移入本地备份目录** `%LOCALAPPDATA%\DevCleaner\file_backups\<会话>\`，7 天内一键回滚；启动时自动清理过期会话。v0.1.0 走的是回收站，v0.2.0 起不再走 |
+| 系统目录 | `to_recycle_bin` 纵深防御：`%SystemRoot%`、`%ProgramFiles%`、`%ProgramFiles(x86)%` 下的文件一律拒绝删除，路径取自环境变量（Windows 装在 D 盘同样生效） |
 | 断链 | 用 `os.rmdir`/`os.unlink` 只删链接本身（它没有内容） |
 | **注册表** | **先写 `.reg` 备份，导出成功才删；导出失败就拒绝删除** |
 | 批量项 | 确认弹窗会显示条目数，并逐条列出前 40 项 |
 | 需确认项 | 不会自动勾选，必须手动勾 |
+| 软件卸载 | 运行软件自带卸载程序 → 自动扫描残留（文件夹/快捷方式/注册表）→ 残留可清理（文件类走备份+回滚，注册表只列出不自动删） |
+
+文件备份目录：`%LOCALAPPDATA%\DevCleaner\file_backups\<会话>\`，每会话带 `manifest.json`。
+回滚：界面里选会话一键还原；原路径已有文件时该项跳过并报出来，不会覆盖。全部条目都还原成功才删掉该会话目录，失败的话会话保留，可以再试。
 
 注册表备份目录：`%LOCALAPPDATA%\DevCleaner\registry_backups\<时间戳>_<类型>\`
 还原：对该目录里的 `.reg` 执行 `reg import "路径"`。
@@ -78,12 +83,12 @@ Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离�
 ```bash
 pip install -r requirements.txt
 
-python app.py --version     # 0.1.0
+python app.py --version     # 0.2.0
 python app.py                # 无界面：跑一次扫描并打印结果
 python app.py --json         # JSON 输出（给脚本用）
 python app.py -c "注册表"     # 只跑某一类
 python gui.py                # 原生界面
-python test_app.py           # 35 项自检
+python test_app.py           # 52 项自检
 build.bat                    # 自检 -> 清理 -> PyInstaller onefile -> 复制 settings.yaml
 ```
 
@@ -177,7 +182,7 @@ class MyScanner(Scanner):
 Git 仓库默认**只读**，不提供删除。只有同时满足「无远程仓库 + 60 天未动 + 无未提交改动」才进可删列表。
 
 **Q：误删了怎么恢复？**
-文件全部进回收站，正常还原。注册表备份在 `%LOCALAPPDATA%\DevCleaner\registry_backups\`，用 `reg import` 还原。
+文件备份在 `%LOCALAPPDATA%\DevCleaner\file_backups\`，界面上选会话一键回滚，7 天内有效。注册表备份在 `%LOCALAPPDATA%\DevCleaner\registry_backups\`，用 `reg import` 还原。超过 7 天的备份在启动时自动清掉，那时只能靠系统还原点或文件恢复工具了。
 
 **Q：为什么只扫到 2 GB，明明 Temp 有 770 MB？**
 Temp 里的东西全部在 7 天内，其中 121 MB 是正在运行的 PyInstaller 解包目录。按天龄过滤收益≈0 还会误删，所以默认跳过。

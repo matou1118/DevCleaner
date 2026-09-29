@@ -8,10 +8,11 @@ from typing import Dict, List, Optional
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
-                               QFrame, QHBoxLayout, QLabel, QMainWindow,
-                               QMessageBox, QPushButton, QScrollArea,
-                               QSizePolicy, QTextEdit, QVBoxLayout, QWidget,
-                               QProgressBar)
+                                QFrame, QHBoxLayout, QHeaderView, QLabel,
+                                QLineEdit, QMainWindow, QMessageBox, QPushButton,
+                                QScrollArea, QSizePolicy, QTableWidget,
+                                QTableWidgetItem, QTextEdit, QVBoxLayout,
+                                QWidget, QProgressBar)
 
 import app as engine
 import lang
@@ -402,6 +403,8 @@ class CleanThread(QThread):
         ok_n: List[str] = []
         fail: List[str] = []
         backups: List[str] = []
+        # 创建文件备份会话（用于回滚）；注册表类不走此路径
+        backup_dir, session_id = engine.create_backup_session()
         # 批量检测占用：只遍历一次进程列表，而非逐文件遍历
         file_paths = [i.path for i in self.sel
                       if not i.path.startswith("REG:") and not i.path.startswith("BULK:")]
@@ -414,28 +417,44 @@ class CleanThread(QThread):
                 if good:
                     ok_n.append(i.name)
                     if "备份" in msg:
-                        backups.append(msg.split("备份", 1)[1].strip())
+                        bk = msg.split("备份", 1)[1].strip()
+                        backups.append(bk)
+                        engine.audit_log("BACKUP", f"{i.name} | {bk}")
                 else:
                     fail.append(f"{i.name}（{msg}）")
+                engine.audit_log("OK" if good else "FAIL",
+                                 f"REG | {i.name} | {i.path} | {msg}")
                 continue
             if i.path.startswith("BULK:"):
                 a, b, errs = engine.delete_bulk(i.path)
                 ok_n.append(f"{i.name}（{a} 项）")
                 if b:
                     fail.extend(errs[:5])
+                engine.audit_log("OK" if not b else "FAIL",
+                                 f"BULK | {i.name} | {i.path} | 成功 {a} 失败 {b}")
                 continue
             p = Path(i.path)
             if not p.exists():
                 fail.append(f"{i.name}（已不存在）")
+                engine.audit_log("SKIP", f"{i.name} | {i.path} | 已不存在")
                 continue
             if os.path.normcase(i.path) in locked:
                 fail.append(f"{i.name}（被进程占用）")
+                engine.audit_log("SKIP", f"{i.name} | {i.path} | 被进程占用")
                 continue
-            good, msg = engine.to_recycle_bin(i.path)
+            good, msg = engine.safe_delete(i.path, backup_dir=backup_dir)
             if good:
                 ok_n.append(i.name)
             else:
                 fail.append(f"{i.name}（{msg}）")
+            engine.audit_log("OK" if good else "FAIL",
+                             f"FILE | {i.name} | {i.path} | {msg}")
+        # 如果备份目录为空（全是注册表/批量），清理掉
+        try:
+            if not any(backup_dir.iterdir()):
+                backup_dir.rmdir()
+        except OSError:
+            pass
         self.done.emit(ok_n, fail, backups)
 
 
@@ -453,10 +472,21 @@ class MainWindow(QMainWindow):
         self.notes_cards: List[CategoryCard] = []
         self.thread: Optional[ScanThread] = None
         self.clean_thread: Optional[CleanThread] = None
-        self.clean_thread: Optional[CleanThread] = None
         self.theme = engine.DEFAULT_THEME
         self._remember = True     # 构造期套用默认主题时不回写配置
         self._last_stage_text = ""
+
+        # 启动时清理 7 天前的文件备份
+        try:
+            engine.cleanup_old_backups(7)
+        except OSError:
+            pass
+
+        # 启动时清理 7 天前的文件备份
+        try:
+            engine.cleanup_old_backups(7)
+        except OSError:
+            pass
 
         root = QWidget()
         root.setObjectName("root")     # QSS 只给它上底色，其余控件透明（见 build_qss）
@@ -587,6 +617,18 @@ class MainWindow(QMainWindow):
         self.btn_log.setObjectName("small")
         self.btn_log.clicked.connect(lambda: self.log.setVisible(not self.log.isVisible()))
         fl.addWidget(self.btn_log)
+        self.btn_hist = QPushButton(T("历史"))
+        self.btn_hist.setObjectName("small")
+        self.btn_hist.clicked.connect(self._show_history)
+        fl.addWidget(self.btn_hist)
+        self.btn_rollback = QPushButton(T("回滚"))
+        self.btn_rollback.setObjectName("small")
+        self.btn_rollback.clicked.connect(self._show_rollback)
+        fl.addWidget(self.btn_rollback)
+        self.btn_uninstall = QPushButton(T("软件卸载"))
+        self.btn_uninstall.setObjectName("small")
+        self.btn_uninstall.clicked.connect(self._show_uninstall)
+        fl.addWidget(self.btn_uninstall)
         outer.addWidget(foot)
 
     def _tile(self, parent_layout, k, v, obj) -> QLabel:
@@ -809,10 +851,10 @@ class MainWindow(QMainWindow):
             return
         if self.clean_thread and self.clean_thread.isRunning():
             return
-        if self.clean_thread and self.clean_thread.isRunning():
-            return
         risky = [i for i in sel if i.risk == "caution"]
         regs = [i for i in sel if i.path.startswith("REG:")]
+        # 预览：分类汇总 + 风险分解
+        preview = _clean_preview(sel)
         # 明细最多列 60 条，剩下的在末尾汇总 —— 列表可滚动了，不用那么保守
         detail = _confirm_details(sel[:60])
         if len(sel) > 60:
@@ -821,17 +863,17 @@ class MainWindow(QMainWindow):
         if regs:
             summary = T(f"确认清理 {len(sel)} 项，其中 {len(regs)} 项是注册表修改？")
             note = T(
-                f"文件类会移入回收站（可还原）。\n"
+                f"文件类会备份到本地（7 天内可回滚）。\n"
                 f"注册表类会先备份 .reg 到\n{engine.backup_root()}\n"
                 f"再删除，导出失败则不会删除。还原方式：对备份目录里的 .reg 执行 reg import。\n\n")
             dlg = ConfirmDialog(self, T("确认清理"), summary,
-                                note + detail, _confirm_risky(risky), danger=bool(regs))
+                                preview + note + detail, _confirm_risky(risky), danger=bool(regs))
         else:
             extra = T("其中包含批量删除，请注意条目数。") if any(
                 i.path.startswith("BULK:") for i in sel) else ""
             summary = T(f"确认清理 {len(sel)} 个条目，"
                         f"合计 {_mix([i.size for i in sel], [getattr(i, 'unit', 'bytes') for i in sel])}？{extra}")
-            dlg = ConfirmDialog(self, T("确认清理"), summary, detail,
+            dlg = ConfirmDialog(self, T("确认清理"), summary, preview + detail,
                                 _confirm_risky(risky), danger=bool(risky))
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -860,13 +902,338 @@ class MainWindow(QMainWindow):
         if backups:
             report.append("\n注册表备份位置：\n" + "\n".join(sorted(set(backups))))
         if ok_n and not getattr(self, "_clean_has_regs", False):
-            report.append("\n文件已进入回收站，清空回收站后才会真正释放空间。")
+            report.append("\n文件已备份到本地，7 天内可点「回滚」还原。")
         if fail:
             report.append(f"\n未处理 {len(fail)} 项：\n· " + "\n· ".join(fail[:15]))
         QMessageBox.information(self, T("清理结果"), "\n".join(report))
         self.bulk(False)
         self._render()
         self.recalc()
+
+    def _show_history(self) -> None:
+        """显示清理审计日志（最近 200 行）。"""
+        p = engine.audit_log_path()
+        lines: list = []
+        if p.is_file():
+            try:
+                all_lines = p.read_text(encoding="utf-8").splitlines()
+                lines = all_lines[-200:]
+            except OSError:
+                lines = []
+        dlg = QDialog(self)
+        dlg.setWindowTitle(T("历史"))
+        dlg.setMinimumWidth(620)
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(16, 14, 16, 12)
+        view = QTextEdit()
+        view.setReadOnly(True)
+        view.setPlainText("\n".join(lines) if lines else T("暂无清理历史"))
+        v.addWidget(view)
+        b = QPushButton(T("关闭"))
+        b.clicked.connect(dlg.accept)
+        v.addWidget(b)
+        dlg.exec()
+
+    def _show_rollback(self) -> None:
+        """显示可回滚的备份会话，选中后一键还原。"""
+        sessions = engine.list_backup_sessions()
+        dlg = QDialog(self)
+        dlg.setWindowTitle(T("回滚"))
+        dlg.setMinimumWidth(580)
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(16, 14, 16, 12)
+        if not sessions:
+            lbl = QLabel(T("暂无可回滚的备份"))
+            v.addWidget(lbl)
+            b = QPushButton(T("关闭"))
+            b.clicked.connect(dlg.accept)
+            v.addWidget(b)
+            dlg.exec()
+            return
+        view = QTextEdit()
+        view.setReadOnly(True)
+        lines = []
+        for s in sessions[:20]:
+            lines.append(f"■ {s['id']}  —  {s['count']} {T('项')}  {engine.human(s['size'])}")
+        view.setPlainText("\n".join(lines))
+        v.addWidget(view)
+        # 选择会话 ID
+        from PySide6.QtWidgets import QComboBox
+        combo = QComboBox()
+        for s in sessions[:20]:
+            combo.addItem(f"{s['id']}  ({s['count']} {T('项')}, {engine.human(s['size'])})", s["id"])
+        v.addWidget(combo)
+        btns = QHBoxLayout()
+        b_restore = QPushButton(T("回滚选中会话"))
+        b_restore.setObjectName("primary")
+        b_cancel = QPushButton(T("关闭"))
+        b_cancel.clicked.connect(dlg.accept)
+        b_restore.clicked.connect(lambda: self._do_rollback(combo.currentData(), dlg))
+        btns.addWidget(b_cancel)
+        btns.addStretch(1)
+        btns.addWidget(b_restore)
+        v.addLayout(btns)
+        dlg.exec()
+
+    def _do_rollback(self, session_id: str, parent_dlg) -> None:
+        """执行回滚并显示结果。"""
+        if not session_id:
+            return
+        ok, fail, errs = engine.restore_backup_session(session_id)
+        engine.audit_log("ROLLBACK", f"会话 {session_id} | 成功 {ok} 失败 {fail}")
+        msg = [f"{T('回滚完成')}：{T('成功')} {ok} {T('项')}"]
+        if fail:
+            msg.append(f"{T('失败')} {fail} {T('项')}：\n" + "\n".join(errs[:10]))
+        QMessageBox.information(self, T("回滚结果"), "\n".join(msg))
+        parent_dlg.accept()
+        self.bulk(False)
+        self._render()
+        self.recalc()
+
+    # ---------------- 软件卸载 ----------------
+    def _show_uninstall(self) -> None:
+        """软件卸载主对话框：列出已安装软件，搜索选择后运行其卸载程序。"""
+        import time as _time
+        dlg = QDialog(self)
+        dlg.setWindowTitle(T("软件卸载"))
+        dlg.setMinimumWidth(780)
+        dlg.setMinimumHeight(520)
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(16, 14, 16, 12)
+
+        # 搜索框
+        search = QLineEdit()
+        search.setPlaceholderText(T("搜索软件名称…"))
+        v.addWidget(search)
+
+        # 软件列表表格（5 列：名称 / 发布者 / 上次使用 / 闲置天数 / 大小）
+        table = QTableWidget(0, 5)
+        table.setHorizontalHeaderLabels(
+            [T("软件名称"), T("发布者"), T("上次使用"), T("闲置天数"), T("大小(MB)")])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setSelectionMode(QTableWidget.SingleSelection)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setAlternatingRowColors(True)
+        v.addWidget(table)
+
+        # 状态标签
+        status = QLabel(T("正在读取已安装软件列表…"))
+        v.addWidget(status)
+
+        # 加载软件列表
+        software_list = engine.list_installed_software()
+        sort_by_idle = [True]   # 默认按闲置排序（最久没用过的排前面）
+        displayed: list = []    # 当前表格行 → InstalledSoftware 对象
+
+        def _idle_text(sw) -> str:
+            if sw.last_used <= 0:
+                return "—"
+            days = int((_time.time() - sw.last_used) / 86400)
+            if days <= 0:
+                return T("今天")
+            return f"{days}{T('天')}"
+
+        def _date_text(sw) -> str:
+            if sw.last_used <= 0:
+                return T("未知")
+            return _time.strftime("%Y-%m-%d", _time.localtime(sw.last_used))
+
+        def populate(filter_text: str = ""):
+            nonlocal displayed
+            table.setRowCount(0)
+            displayed = []
+            ft = filter_text.lower()
+            filtered = [sw for sw in software_list
+                        if not ft or ft in sw.name.lower() or ft in sw.publisher.lower()]
+            # 排序：按闲置 → last_used 升序（0 排最前）；按名称 → 字母序
+            if sort_by_idle[0]:
+                filtered.sort(key=lambda s: s.last_used)
+            else:
+                filtered.sort(key=lambda s: s.name.lower())
+            for sw in filtered:
+                row = table.rowCount()
+                table.insertRow(row)
+                table.setItem(row, 0, QTableWidgetItem(sw.name))
+                table.setItem(row, 1, QTableWidgetItem(sw.publisher))
+                table.setItem(row, 2, QTableWidgetItem(_date_text(sw)))
+                table.setItem(row, 3, QTableWidgetItem(_idle_text(sw)))
+                table.setItem(row, 4, QTableWidgetItem(
+                    str(sw.size_mb) if sw.size_mb else ""))
+                displayed.append(sw)
+            status.setText(f"{T('共')} {table.rowCount()} {T('款软件')}")
+
+        populate()
+        search.textChanged.connect(lambda t: populate(t))
+
+        # 按钮区
+        btns = QHBoxLayout()
+        b_sort = QPushButton(T("按闲置排序"))
+        b_refresh = QPushButton(T("刷新列表"))
+        b_uninstall = QPushButton(T("运行卸载程序"))
+        b_uninstall.setObjectName("primary")
+        b_close = QPushButton(T("关闭"))
+        b_close.clicked.connect(dlg.accept)
+
+        def toggle_sort():
+            sort_by_idle[0] = not sort_by_idle[0]
+            b_sort.setText(T("按闲置排序") if not sort_by_idle[0] else T("按名称排序"))
+            populate(search.text())
+
+        b_sort.clicked.connect(toggle_sort)
+
+        def do_uninstall():
+            row = table.currentRow()
+            if row < 0 or row >= len(displayed):
+                QMessageBox.warning(dlg, T("提示"), T("请先选择要卸载的软件"))
+                return
+            sw = displayed[row]
+            # 确认
+            ans = QMessageBox.question(
+                dlg, T("确认卸载"),
+                f"{T('即将运行卸载程序')}\n\n{sw.name}\n{sw.publisher}\n\n"
+                f"{T('卸载完成后将自动扫描残留文件和注册表')}\n"
+                f"{T('是否继续')}",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if ans != QMessageBox.Yes:
+                return
+            # 运行卸载程序
+            status.setText(T("正在运行卸载程序，请等待完成…"))
+            dlg.repaint()
+            ok, msg = engine.run_uninstaller(sw.uninstall_string, wait=True)
+            engine.audit_log("UNINSTALL", f"{sw.name} | {msg}")
+            if not ok:
+                QMessageBox.warning(dlg, T("卸载失败"), msg)
+                status.setText(T("卸载失败"))
+                return
+            # 扫描残留
+            status.setText(T("正在扫描残留…"))
+            dlg.repaint()
+            residuals = engine.find_residuals(sw.name, sw.install_location)
+            total = (len(residuals["registry"]) +
+                     len(residuals["folders"]) +
+                     len(residuals["shortcuts"]))
+            if total == 0:
+                QMessageBox.information(dlg, T("卸载完成"),
+                                        f"{sw.name} {T('已卸载')}\n{T('未发现残留')}")
+                status.setText(T("卸载完成，无残留"))
+                populate(search.text())
+                return
+            # 显示残留清理对话框
+            self._show_residuals(dlg, sw, residuals)
+            populate(search.text())
+            status.setText(T("卸载完成"))
+
+        b_uninstall.clicked.connect(do_uninstall)
+
+        def do_refresh():
+            nonlocal software_list
+            status.setText(T("正在刷新…"))
+            dlg.repaint()
+            software_list = engine.list_installed_software()
+            populate(search.text())
+
+        b_refresh.clicked.connect(do_refresh)
+
+        btns.addWidget(b_sort)
+        btns.addWidget(b_refresh)
+        btns.addStretch(1)
+        btns.addWidget(b_close)
+        btns.addWidget(b_uninstall)
+        v.addLayout(btns)
+        dlg.exec()
+
+    def _show_residuals(self, parent_dlg, sw, residuals: dict) -> None:
+        """显示卸载后残留项，让用户选择清理。"""
+        dlg = QDialog(parent_dlg)
+        dlg.setWindowTitle(T("残留清理") + f" — {sw.name}")
+        dlg.setMinimumWidth(600)
+        dlg.setMinimumHeight(420)
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(16, 14, 16, 12)
+
+        view = QTextEdit()
+        view.setReadOnly(True)
+        lines: list = []
+
+        # 注册表残留
+        reg = residuals.get("registry", [])
+        if reg:
+            lines.append(f"{'═' * 50}")
+            lines.append(f"⚠ {T('注册表残留')} ({len(reg)} {T('项')})")
+            lines.append(f"{'─' * 50}")
+            for r in reg[:30]:
+                lines.append(f"  {r}")
+            if len(reg) > 30:
+                lines.append(f"  … {T('等')} {len(reg)} {T('项')}")
+            lines.append("")
+
+        # 文件夹残留
+        folders = residuals.get("folders", [])
+        if folders:
+            lines.append(f"{'═' * 50}")
+            lines.append(f"📁 {T('文件夹残留')} ({len(folders)} {T('项')})")
+            lines.append(f"{'─' * 50}")
+            for f in folders:
+                lines.append(f"  {f}")
+            lines.append("")
+
+        # 快捷方式残留
+        lnks = residuals.get("shortcuts", [])
+        if lnks:
+            lines.append(f"{'═' * 50}")
+            lines.append(f"🔗 {T('快捷方式残留')} ({len(lnks)} {T('项')})")
+            lines.append(f"{'─' * 50}")
+            for l in lnks:
+                lines.append(f"  {l}")
+            lines.append("")
+
+        view.setPlainText("\n".join(lines))
+        v.addWidget(view)
+
+        info = QLabel(
+            f"{T('文件夹和快捷方式可安全清理（已备份，可回滚）')}\n"
+            f"{T('注册表残留需手动确认，不会自动删除')}")
+        v.addWidget(info)
+
+        btns = QHBoxLayout()
+        b_clean = QPushButton(T("清理残留"))
+        b_clean.setObjectName("primary")
+        b_skip = QPushButton(T("跳过"))
+        b_skip.clicked.connect(dlg.accept)
+
+        def do_clean():
+            b_clean.setEnabled(False)
+            b_clean.setText(T("正在清理…"))
+            dlg.repaint()
+            result = engine.clean_residuals(residuals,
+                                             backup_dir=engine.file_backup_root())
+            engine.audit_log("RESIDUAL_CLEAN",
+                             f"{sw.name} | 删除 {result['deleted']} "
+                             f"失败 {result['failed']} "
+                             f"注册表待定 {result['reg_pending']}")
+            msg = [f"{T('清理完成')}"]
+            msg.append(f"  {T('已删除')} {result['deleted']} {T('项')}")
+            if result['failed']:
+                msg.append(f"  {T('失败')} {result['failed']} {T('项')}")
+            if result['reg_pending']:
+                msg.append(f"  ⚠ {T('注册表残留')} {result['reg_pending']} "
+                           f"{T('项需手动处理')}")
+            msg.append("")
+            msg.append(T("已删除项已备份，可通过「回滚」恢复"))
+            QMessageBox.information(dlg, T("残留清理结果"), "\n".join(msg))
+            dlg.accept()
+
+        b_clean.clicked.connect(do_clean)
+        btns.addWidget(b_skip)
+        btns.addStretch(1)
+        btns.addWidget(b_clean)
+        v.addLayout(btns)
+        dlg.exec()
 
 
 class ConfirmDialog(QDialog):
@@ -943,6 +1310,31 @@ def _confirm_details(sel) -> str:
         out.append(f"· {i.name}  {fmt(i)}")
         out.append(f"  {_human_path(i)}")
     return "\n".join(out)
+
+
+def _clean_preview(sel) -> str:
+    """清理预览：按分类汇总空间 + 风险分解，让用户在确认前看清将删什么。"""
+    from collections import OrderedDict
+    by_cat: OrderedDict = OrderedDict()
+    safe_n = caution_n = 0
+    for i in sel:
+        cat = i.category
+        if cat not in by_cat:
+            by_cat[cat] = {"count": 0, "size": 0, "unit": getattr(i, "unit", "bytes")}
+        by_cat[cat]["count"] += 1
+        if by_cat[cat]["unit"] != "count":
+            by_cat[cat]["size"] += i.size
+        if i.risk == "caution":
+            caution_n += 1
+        else:
+            safe_n += 1
+    lines = [T("── 清理预览 ──")]
+    for cat, info in by_cat.items():
+        sz = engine.human(info["size"]) if info["unit"] != "count" else f"{info['count']} {T('项')}"
+        lines.append(f"  {cat}: {info['count']} {T('项')}  {sz}")
+    lines.append(T(f"── 安全 {safe_n} 项 / 需确认 {caution_n} 项 ──"))
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _confirm_risky(risky) -> str:

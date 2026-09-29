@@ -7,7 +7,7 @@ A local disk cleaner for Windows. Native window (PySide6), single-file exe. **Wo
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-E0af68.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://learn.microsoft.com/windows/)
 
-**Current version v0.1.0** · [中文](README.md) · [📖 Usage guide](docs/usage.en.md) · [📷 All screenshots](docs/Screenshots.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.en.md) · [Security](SECURITY.en.md)
+**Current version v0.2.0** · [中文](README.md) · [📖 Usage guide](docs/usage.en.md) · [📷 All screenshots](docs/Screenshots.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.en.md) · [Security](SECURITY.en.md)
 
 Scanning starts the moment you open it. Categories are collapsed by default, so every category and its size fits on one screen. Expand the ones you care about, or hit "全部展开" (expand all).
 
@@ -51,11 +51,16 @@ Such programs are no longer reported at all. Two tests guard this: one where the
 
 | Kind | Behaviour |
 |---|---|
-| Regular files | `SHFileOperationW` + `FOF_ALLOWUNDO` — **goes to the Recycle Bin**, restorable |
+| Regular files | **Moved to a local backup directory** at `%LOCALAPPDATA%\DevCleaner\file_backups\<session>\`, restorable in one click for 7 days; expired sessions are purged at startup. v0.1.0 used the Recycle Bin — v0.2.0 does not |
+| System directories | `to_recycle_bin` refuses outright to delete anything under `%SystemRoot%`, `%ProgramFiles%` or `%ProgramFiles(x86)%`. The paths come from the environment, so a Windows install on D: is protected too |
 | Broken links | `os.rmdir`/`os.unlink` on the link itself only (it has no content) |
 | **Registry** | **Exports a `.reg` backup first; if the export fails, it refuses to delete** |
 | Bulk items | The confirmation dialog shows the item count and lists the first 40 by name |
 | "Caution" items | Never pre-checked; you have to select them yourself |
+| Software uninstall | Runs the software's own uninstaller → auto-scans for leftovers (folders / shortcuts / registry) → leftovers can be cleaned (files go through backup + rollback; registry entries are listed but not auto-deleted) |
+
+File backups land in `%LOCALAPPDATA%\DevCleaner\file_backups\<session>\`, one `manifest.json` per session.
+To roll back: pick a session in the UI and restore it in one click. If a file already exists at the original path that entry is skipped and reported — nothing is overwritten. The session directory is only deleted once every entry restored successfully; if anything fails the session is kept so you can try again.
 
 Registry backups land in `%LOCALAPPDATA%\DevCleaner\registry_backups\<timestamp>_<type>\`.
 To restore: `reg import "<path>"` on the `.reg` file in that directory.
@@ -80,7 +85,7 @@ Python 3.10+ is needed only to run from source or rebuild.
 ```bash
 pip install -r requirements.txt
 
-python app.py --version     # 0.1.0
+python app.py --version     # 0.2.0
 python app.py                # headless: run a scan and print results
 python app.py --json         # JSON output (for scripts)
 python app.py -c "registry"  # run one category only
@@ -177,7 +182,7 @@ Open an issue to claim one.
 Git repos are **read-only** — there's no delete button. A repo only becomes deletable when it has no remote, is untouched for 60+ days, and has no uncommitted changes.
 
 **Q: I deleted something by mistake. How do I get it back?**
-Files go to the Recycle Bin, so normal restore works. Registry backups are in `%LOCALAPPDATA%\DevCleaner\registry_backups\` — use `reg import` on the `.reg` there.
+File backups are in `%LOCALAPPDATA%\DevCleaner\file_backups\` — pick a session in the UI to roll it back, valid for 7 days. Registry backups are in `%LOCALAPPDATA%\DevCleaner\registry_backups\` — use `reg import` on the `.reg` there. Backups older than 7 days are purged at startup; after that a System Restore point or a file recovery tool is the only way back.
 
 **Q: It only found 2 GB, but Temp alone is 770 MB.**
 Everything in Temp is under 7 days old, and 121 MB of it is a PyInstaller unpack directory for a running process. An age filter reclaims nothing there and risks breaking live programs, so it's skipped by default.

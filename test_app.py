@@ -1,10 +1,12 @@
 """DevCleaner 自检 —— python test_app.py 应输出 ALL OK"""
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # GitHub runner 的控制台是 cp1252，本机是 GBK —— 两者都编不了中文。
@@ -1565,6 +1567,419 @@ def t_smoke():
     assert app.resource("settings.yaml").is_file(), "找不到 settings.yaml"
 
 
+# ---------------- -c 分类过滤器 ----------------
+def t_category_filter():
+    """-c 过滤器修复：旁路分类能选中 + 单分类不泄漏"""
+    assert app.BYPASS_CATEGORIES, "BYPASS_CATEGORIES 未定义"
+
+    # 全量扫描，记录是否有注册表项
+    app.run_scan()
+    has_registry = any("注册表" in i.category for i in app.STATE.items)
+
+    # 过滤"注册表"：所有结果必须含"注册表"，不能混入其他分类
+    app.run_scan(category_filter="注册表")
+    for i in app.STATE.items:
+        assert "注册表" in i.category, f"过滤泄漏: {i.category}"
+    if has_registry:
+        assert app.STATE.items, "全量有注册表项但 -c 过滤后为空"
+
+    # 过滤"构建产物"：不能泄漏注册表项
+    app.run_scan(category_filter="构建产物")
+    for i in app.STATE.items:
+        assert "构建产物" in i.category, f"过滤泄漏: {i.category}"
+        assert "注册表" not in i.category, f"注册表泄漏到构建产物: {i.category}"
+
+
+# ---------------- 审计日志 ----------------
+def t_audit_log():
+    """审计日志：能写入、内容正确、不抛异常"""
+    app.audit_log("TEST", "自检测试条目")
+    p = app.audit_log_path()
+    assert p.is_file(), "审计日志文件未创建"
+    content = p.read_text(encoding="utf-8")
+    assert "TEST" in content, "审计日志缺少 TEST 动作"
+    assert "自检测试条目" in content, "审计日志缺少详情文本"
+    # 格式：[时间戳] ACTION | detail
+    last = content.strip().splitlines()[-1]
+    assert last.startswith("["), f"日志格式不对: {last}"
+    assert "] TEST | " in last, f"日志格式不对: {last}"
+
+
+# ---------------- 删除路径安全校验 ----------------
+def t_path_safety():
+    """to_recycle_bin 纵深防御：拒绝删系统目录内的文件"""
+    # 正常文件可以删 —— 独立临时目录，不依赖共享 tmp（会被 t_no_test_crash_left_behind 清掉）
+    own = Path(tempfile.mkdtemp(prefix="dc_safety_"))
+    try:
+        f = own / "safe_to_delete.txt"
+        f.write_text("x", encoding="utf-8")
+        ok, msg = to_recycle_bin(str(f))
+        assert ok, f"正常文件应可删: {msg}"
+    finally:
+        shutil.rmtree(own, ignore_errors=True)
+
+    # 系统目录内的文件拒绝删除（notepad.exe 一定存在）
+    # 路径取自环境变量：Windows 装在 D 盘时，写死 C:/Windows 等于没保护
+    sys_file = Path(os.path.expandvars("%SystemRoot%")) / "notepad.exe"
+    if sys_file.exists():
+        ok, msg = to_recycle_bin(str(sys_file))
+        assert not ok, "系统目录文件不应被删"
+        assert "拒绝" in msg or "系统目录" in msg, f"错误信息不对: {msg}"
+
+
+def t_path_safety_env():
+    """系统目录防护必须认环境变量，不能写死 C:"""
+    own = Path(tempfile.mkdtemp(prefix="dc_root_"))
+    old = os.environ.get("SystemRoot")
+    try:
+        fake_win = own / "Windows"
+        fake_win.mkdir()
+        f = fake_win / "notepad.exe"
+        f.write_text("x", encoding="utf-8")
+        os.environ["SystemRoot"] = str(own)
+        ok, msg = to_recycle_bin(str(f))
+        assert not ok, "环境变量指向的目录同样必须拒绝删除（写死 C: 就是这个洞）"
+        assert f.exists(), "文件不能真被删掉"
+    finally:
+        if old is None:
+            os.environ.pop("SystemRoot", None)
+        else:
+            os.environ["SystemRoot"] = old
+        shutil.rmtree(own, ignore_errors=True)
+
+
+# ---------------- 文件备份与回滚 ----------------
+def t_safe_delete_backup():
+    """safe_delete + 备份目录：文件移入备份、manifest 正确、可回滚"""
+    own = Path(tempfile.mkdtemp(prefix="dc_backup_"))
+    try:
+        # 创建测试文件
+        f1 = own / "file_a.txt"
+        f2 = own / "file_b.txt"
+        f1.write_text("content A", encoding="utf-8")
+        f2.write_text("content B", encoding="utf-8")
+
+        # 创建备份会话
+        bdir, sid = app.create_backup_session()
+        assert bdir.is_dir(), "备份目录未创建"
+        assert sid, "会话 ID 为空"
+
+        # safe_delete 到备份目录
+        ok, msg = app.safe_delete(str(f1), backup_dir=bdir)
+        assert ok, f"safe_delete 应成功: {msg}"
+        assert "BACKEDUP:" in msg, f"应走备份路径: {msg}"
+        assert not f1.exists(), "原文件应已被移走"
+
+        ok2, msg2 = app.safe_delete(str(f2), backup_dir=bdir)
+        assert ok2, f"safe_delete 第二个文件应成功: {msg2}"
+
+        # manifest 应有 2 条
+        manifest = bdir / "manifest.json"
+        assert manifest.is_file(), "manifest 未创建"
+        entries = json.loads(manifest.read_text(encoding="utf-8"))
+        assert len(entries) == 2, f"manifest 应有 2 条，实际 {len(entries)}"
+
+        # 列出会话
+        sessions = app.list_backup_sessions()
+        assert any(s["id"] == sid for s in sessions), "list_backup_sessions 未列出新会话"
+
+        # 回滚
+        ok_n, fail_n, errs = app.restore_backup_session(sid)
+        assert ok_n == 2, f"回滚应成功 2 项，实际 {ok_n}，失败 {fail_n}: {errs}"
+        assert f1.read_text(encoding="utf-8") == "content A", "回滚后内容不对"
+        assert f2.read_text(encoding="utf-8") == "content B", "回滚后内容不对"
+
+        # 回滚后备份目录应被清理
+        assert not bdir.exists(), "回滚成功后备份目录应删除"
+    finally:
+        shutil.rmtree(own, ignore_errors=True)
+
+
+def t_backup_cleanup_old():
+    """cleanup_old_backups：超龄备份被清理，新备份保留"""
+    bdir, sid = app.create_backup_session()
+    # 写一个假 manifest 使其成为有效会话
+    (bdir / "manifest.json").write_text("[]", encoding="utf-8")
+    # 把修改时间改为 10 天前
+    old_ts = time.time() - 10 * 86400
+    os.utime(str(bdir), (old_ts, old_ts))
+
+    # 再创建一个新会话
+    bdir2, sid2 = app.create_backup_session()
+    (bdir2 / "manifest.json").write_text("[]", encoding="utf-8")
+
+    removed = app.cleanup_old_backups(7)
+    assert removed >= 1, f"应清理至少 1 个旧备份，实际 {removed}"
+    assert not bdir.exists(), "旧备份应被删除"
+    assert bdir2.exists(), "新备份应保留"
+
+    # 清理
+    shutil.rmtree(bdir2, ignore_errors=True)
+
+
+def t_safe_delete_no_backup():
+    """safe_delete 无 backup_dir 时降级走回收站"""
+    own = Path(tempfile.mkdtemp(prefix="dc_noback_"))
+    try:
+        f = own / "to_recycle.txt"
+        f.write_text("x", encoding="utf-8")
+        ok, msg = app.safe_delete(str(f), backup_dir=None)
+        assert ok, f"无备份时应走回收站: {msg}"
+        assert "BACKEDUP:" not in msg, "不应走备份路径"
+    finally:
+        shutil.rmtree(own, ignore_errors=True)
+
+
+# ============================ 软件卸载测试 ============================
+
+def t_list_installed_software():
+    """list_installed_software 返回列表，每项有 name 和 uninstall_string"""
+    sw = app.list_installed_software()
+    assert isinstance(sw, list), "应返回列表"
+    for s in sw:
+        assert s.name, "每项必须有 name"
+        assert s.uninstall_string, "每项必须有 uninstall_string"
+        assert s.reg_hive in ("HKLM", "HKCU"), f"reg_hive 非法: {s.reg_hive}"
+
+
+def t_list_installed_software_dedup():
+    """去重：同一软件不应在 HKLM 和 WOW6432Node 各出现一次"""
+    sw = app.list_installed_software()
+    names = [s.name.lower() for s in sw]
+    assert len(names) == len(set(names)), "存在重复软件名"
+
+
+def t_list_installed_software_no_kb():
+    """KB 补丁应被过滤掉"""
+    sw = app.list_installed_software()
+    for s in sw:
+        assert not (s.name.startswith("KB") and s.name[2:7].isdigit()), \
+            f"KB 补丁未被过滤: {s.name}"
+
+
+def t_run_uninstaller_empty():
+    """空字符串应返回失败"""
+    ok, msg = app.run_uninstaller("")
+    assert not ok, "空卸载命令应失败"
+    assert "无卸载命令" in msg, f"消息不对: {msg}"
+
+
+def t_run_uninstaller_missing_exe():
+    """不存在的 exe 应返回失败"""
+    ok, msg = app.run_uninstaller(r"C:\nonexistent\uninst.exe")
+    assert not ok, "不存在的 exe 应失败"
+    assert "不存在" in msg, f"消息不对: {msg}"
+
+
+def t_run_uninstaller_quoted():
+    """带引号的卸载命令能正确解析 exe 路径"""
+    # 用一个肯定存在的 exe（cmd.exe）但加 /c exit 0 让它立即退出
+    ok, msg = app.run_uninstaller(r'"C:\Windows\System32\cmd.exe" /c exit 0')
+    assert ok, f"带引号的 cmd 应成功: {msg}"
+
+
+def t_run_uninstaller_unquoted():
+    """不带引号的卸载命令能正确解析"""
+    ok, msg = app.run_uninstaller(r"C:\Windows\System32\cmd.exe /c exit 0")
+    assert ok, f"不带引号的 cmd 应成功: {msg}"
+
+
+def t_run_uninstaller_bare_name():
+    """卸载命令只写 exe 名时要按 PATH 解析。
+
+    MSI 制软件一律是 `MsiExec.exe /X{GUID}` 这种裸 exe 名，而
+    os.path.exists('MsiExec.exe') 恒为 False —— 不按 PATH 解析的话，
+    它们的卸载全被误报成「卸载程序不存在」。这里用 cmd 验同一条代码路径。
+    """
+    ok, msg = app.run_uninstaller("cmd /c exit 0")
+    assert ok, f"裸 exe 名应能按 PATH 解析并执行: {msg}"
+
+
+def t_find_residuals_structure():
+    """find_residuals 返回正确结构"""
+    r = app.find_residuals("NonExistentSoftwareXYZ123")
+    assert "registry" in r, "缺 registry 键"
+    assert "folders" in r, "缺 folders 键"
+    assert "shortcuts" in r, "缺 shortcuts 键"
+    assert isinstance(r["registry"], list), "registry 应为列表"
+    assert isinstance(r["folders"], list), "folders 应为列表"
+    assert isinstance(r["shortcuts"], list), "shortcuts 应为列表"
+
+
+def t_find_residuals_finds_folder():
+    """find_residuals 能找到 AppData 下的残留目录"""
+    own = Path(tempfile.mkdtemp(prefix="dc_resid_"))
+    try:
+        # 在 %TEMP% 下造一个假软件目录
+        fake_name = "DevCleanerTestFakeApp42"
+        appdata = os.environ.get("APPDATA", "")
+        fake_dir = Path(appdata) / fake_name
+        created = False
+        if not fake_dir.exists():
+            fake_dir.mkdir(parents=True)
+            created = True
+        try:
+            r = app.find_residuals(fake_name)
+            found = any(fake_name.lower() in f.lower() for f in r["folders"])
+            assert found, f"未找到残留目录 {fake_dir}"
+        finally:
+            if created:
+                shutil.rmtree(fake_dir, ignore_errors=True)
+    finally:
+        shutil.rmtree(own, ignore_errors=True)
+
+
+def t_clean_residuals_empty():
+    """clean_residuals 处理空残留应返回零计数"""
+    r = app.clean_residuals({"registry": [], "folders": [], "shortcuts": []})
+    assert r["deleted"] == 0, "空残留删除数应为 0"
+    assert r["failed"] == 0, "空残留失败数应为 0"
+    assert r["reg_pending"] == 0, "空残留注册表待定应为 0"
+
+
+def t_clean_residuals_with_backup():
+    """clean_residuals 清理文件时走备份路径"""
+    own = Path(tempfile.mkdtemp(prefix="dc_clean_"))
+    backup = own / "backup"
+    backup.mkdir()
+    try:
+        fake_file = own / "FakeAppData"
+        fake_file.mkdir()
+        (fake_file / "config.ini").write_text("[x]", encoding="utf-8")
+        residuals = {"registry": [], "folders": [str(fake_file)], "shortcuts": []}
+        r = app.clean_residuals(residuals, backup_dir=backup)
+        assert r["deleted"] == 1, f"应删除 1 项: {r}"
+        assert r["failed"] == 0, f"不应有失败: {r}"
+        assert not fake_file.exists(), "目录应已被删除"
+    finally:
+        shutil.rmtree(own, ignore_errors=True)
+
+
+def t_installed_software_dataclass():
+    """InstalledSoftware dataclass 字段完整"""
+    sw = app.InstalledSoftware(
+        name="Test", publisher="Pub", version="1.0", size_mb=10,
+        uninstall_string="x", quiet_string="", install_location="",
+        reg_hive="HKLM", reg_key="SOFTWARE\\Test")
+    assert sw.name == "Test"
+    assert sw.size_mb == 10
+    assert sw.reg_hive == "HKLM"
+    assert sw.last_used == 0.0, "last_used 默认应为 0.0"
+
+
+def t_last_used_time_returns_float():
+    """_last_used_time 返回 float，非负"""
+    t = app._last_used_time("NonExistentXYZ123")
+    assert isinstance(t, float), f"应返回 float，得到 {type(t)}"
+    assert t >= 0.0, f"应非负，得到 {t}"
+
+
+def t_last_used_time_unknown_is_zero():
+    """不存在的软件 last_used 应为 0"""
+    t = app._last_used_time("AbsolutelyNonExistentSoftware999")
+    assert t == 0.0, f"不存在的软件应为 0.0，得到 {t}"
+
+
+def t_last_used_time_finds_appdata():
+    """_last_used_time 能从 AppData 目录探测到时间"""
+    fake_name = "DevCleanerTestLastUsed42"
+    appdata = os.environ.get("APPDATA", "")
+    fake_dir = Path(appdata) / fake_name
+    created = False
+    try:
+        if not fake_dir.exists():
+            fake_dir.mkdir(parents=True)
+            created = True
+        # 写个文件确保 mtime 更新
+        (fake_dir / "config.ini").write_text("[x]", encoding="utf-8")
+        t = app._last_used_time(fake_name)
+        assert t > 0.0, f"应探测到 AppData 目录时间，得到 {t}"
+    finally:
+        if created:
+            shutil.rmtree(fake_dir, ignore_errors=True)
+
+
+def t_last_used_time_finds_exe():
+    """_last_used_time 能从 exe 的 atime 探测到时间"""
+    cmd = r"C:\Windows\System32\cmd.exe"
+    t = app._last_used_time("cmd", uninstall_string=cmd)
+    assert t > 0.0, f"应探测到 cmd.exe 的 atime，得到 {t}"
+
+
+def t_list_installed_software_has_last_used():
+    """list_installed_software 每项的 last_used 是 float"""
+    sw = app.list_installed_software()
+    for s in sw:
+        assert isinstance(s.last_used, float), \
+            f"last_used 应为 float: {s.name} -> {type(s.last_used)}"
+        assert s.last_used >= 0.0, \
+            f"last_used 应非负: {s.name} -> {s.last_used}"
+
+
+def t_list_installed_software_some_have_last_used():
+    """至少有一些软件能探测到 last_used"""
+    sw = app.list_installed_software()
+    valid = [s for s in sw if s.last_used > 0]
+    assert len(valid) > 0, "应有至少 1 款软件探测到 last_used"
+    assert sw.last_used == 0.0, "last_used 默认应为 0.0"
+
+
+def t_last_used_time_returns_float():
+    """_last_used_time 返回 float，非负"""
+    t = app._last_used_time("NonExistentXYZ123")
+    assert isinstance(t, float), f"应返回 float，得到 {type(t)}"
+    assert t >= 0.0, f"应非负，得到 {t}"
+
+
+def t_last_used_time_unknown_is_zero():
+    """不存在的软件 last_used 应为 0"""
+    t = app._last_used_time("AbsolutelyNonExistentSoftware999")
+    assert t == 0.0, f"不存在的软件应为 0.0，得到 {t}"
+
+
+def t_last_used_time_finds_appdata():
+    """_last_used_time 能从 AppData 目录探测到时间"""
+    fake_name = "DevCleanerTestLastUsed42"
+    appdata = os.environ.get("APPDATA", "")
+    fake_dir = Path(appdata) / fake_name
+    created = False
+    try:
+        if not fake_dir.exists():
+            fake_dir.mkdir(parents=True)
+            created = True
+        # 写个文件确保 mtime 更新
+        (fake_dir / "config.ini").write_text("[x]", encoding="utf-8")
+        t = app._last_used_time(fake_name)
+        assert t > 0.0, f"应探测到 AppData 目录时间，得到 {t}"
+    finally:
+        if created:
+            shutil.rmtree(fake_dir, ignore_errors=True)
+
+
+def t_last_used_time_finds_exe():
+    """_last_used_time 能从 exe 的 atime 探测到时间"""
+    cmd = r"C:\Windows\System32\cmd.exe"
+    t = app._last_used_time("cmd", uninstall_string=cmd)
+    assert t > 0.0, f"应探测到 cmd.exe 的 atime，得到 {t}"
+
+
+def t_list_installed_software_has_last_used():
+    """list_installed_software 每项的 last_used 是 float"""
+    sw = app.list_installed_software()
+    for s in sw:
+        assert isinstance(s.last_used, float), \
+            f"last_used 应为 float: {s.name} -> {type(s.last_used)}"
+        assert s.last_used >= 0.0, \
+            f"last_used 应非负: {s.name} -> {s.last_used}"
+
+
+def t_list_installed_software_some_have_last_used():
+    """至少有一些软件能探测到 last_used"""
+    sw = app.list_installed_software()
+    valid = [s for s in sw if s.last_used > 0]
+    assert len(valid) > 0, "应有至少 1 款软件探测到 last_used"
+
+
 if __name__ == "__main__":
     tmp = Path(tempfile.mkdtemp(prefix="devcleaner_test_"))
     print("DevCleaner self-test")
@@ -1618,6 +2033,32 @@ if __name__ == "__main__":
         check("确认弹窗可滚动不溢出", t_confirm_dialog_scrolls)
         check("许可：署名+禁商用", t_license_attribution)
         check("exe 自带 Python（无解释器也能跑）", t_exe_standalone_no_python)
+        check("-c 分类过滤器（旁路+不泄漏）", t_category_filter)
+        check("审计日志写入", t_audit_log)
+        check("删除路径安全校验", t_path_safety)
+        check("删除路径安全校验：认环境变量而非写死 C:", t_path_safety_env)
+        check("文件备份+回滚", t_safe_delete_backup)
+        check("旧备份自动清理", t_backup_cleanup_old)
+        check("无备份降级回收站", t_safe_delete_no_backup)
+        check("已安装软件列表", t_list_installed_software)
+        check("软件列表去重", t_list_installed_software_dedup)
+        check("KB 补丁过滤", t_list_installed_software_no_kb)
+        check("卸载：空命令失败", t_run_uninstaller_empty)
+        check("卸载：exe 不存在失败", t_run_uninstaller_missing_exe)
+        check("卸载：带引号命令解析", t_run_uninstaller_quoted)
+        check("卸载：不带引号命令解析", t_run_uninstaller_unquoted)
+        check("卸载：裸 exe 名按 PATH 解析", t_run_uninstaller_bare_name)
+        check("残留：返回结构正确", t_find_residuals_structure)
+        check("残留：能找到 AppData 目录", t_find_residuals_finds_folder)
+        check("残留清理：空残留零计数", t_clean_residuals_empty)
+        check("残留清理：走备份路径", t_clean_residuals_with_backup)
+        check("InstalledSoftware dataclass", t_installed_software_dataclass)
+        check("last_used：返回 float", t_last_used_time_returns_float)
+        check("last_used：未知软件为 0", t_last_used_time_unknown_is_zero)
+        check("last_used：探测 AppData", t_last_used_time_finds_appdata)
+        check("last_used：探测 exe atime", t_last_used_time_finds_exe)
+        check("last_used：列表项有 float", t_list_installed_software_has_last_used)
+        check("last_used：至少 1 款有效", t_list_installed_software_some_have_last_used)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -17,6 +17,32 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.0] — 2026-09-29
+
+### Added · safety
+
+- **Cleanup preview**: the confirm dialog now shows a per-category summary (item count + size) and a risk breakdown (safe / needs confirmation) *above* the file list, so you can see what is about to go before you agree to it.
+- **Cleanup rollback**: file deletions are no longer sent to the Recycle Bin — they are moved to a local backup directory, restorable in one click for 7 days; expired backups are purged at startup.
+- **System directory guard**: `to_recycle_bin` refuses outright to delete anything under the Windows or Program Files directories, even if a scanner misflags it.
+
+### Added · uninstall
+
+- **Software uninstall**: reads the installed-software list, runs the vendor's own uninstaller, then scans for leftovers (registry keys, install directory, AppData, shortcuts) which can be cleared in one click.
+- **Leftover cleanup**: after uninstalling, searches both `SOFTWARE` registry branches, `%APPDATA%`, `%LOCALAPPDATA%` and Start Menu shortcuts for entries matching the software name.
+
+### Fixed
+
+- `-c` category filter defect: side categories (registry / Git / npm) are now selectable and no longer leak items from other categories.
+- Removed two duplicated GUI blocks (duplicate progress reporting + result summary).
+
+### Improved
+
+- Audit log: every cleanup appends to `%LOCALAPPDATA%/DevCleaner/clean_history.log`; new "History" button in the GUI footer.
+- `settings.yaml` personal paths replaced with generic `%VAR%` examples.
+- Self-test: 35 checks → 75.
+
+---
+
 ## [0.1.0] — 2026-09-28
 
 First public release. Measured on Windows 11, 24 volumes.
@@ -117,5 +143,6 @@ GitHub Actions runners use cp1252 and Chinese machines use GBK; neither can enco
 - Survives a non-UTF-8 console
 - Leaves no temp directories behind
 
-[Unreleased]: https://github.com/matou1118/DevCleaner/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/matou1118/DevCleaner/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0
 [0.1.0]: https://github.com/matou1118/DevCleaner/releases/tag/v0.1.0
