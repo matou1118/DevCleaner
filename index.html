@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DevCleaner — find what you can safely delete</title>
+<meta name="description" content="A standalone Windows cleaner that shows its work. 9 evidence-based scanners, files backed up with a 7-day rollback, registry backed up before deletion. Open source.">
+<meta property="og:title" content="DevCleaner — find what you can safely delete">
+<meta property="og:description" content="Evidence-based Windows cleaner. 9 scanners, 7-day file rollback, .reg backup for the registry. Open source.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1117'/%3E%3Cpath d='M9 11h14M9 16h14M9 21h9' stroke='%237aa2f7' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0a0c12; --bg2:#0f1117; --panel:rgba(255,255,255,.035); --panel-b:rgba(255,255,255,.08);
+  --fg:#e6e9f0; --fg2:#aab3c5; --fg3:#828c9f;
+  --accent:#7aa2f7; --accent2:#bb9af7; --safe:#9ece6a; --caution:#e0af68; --rose:#f7768e;
+  --radius:18px; --max:1160px;
+  --ff:"Inter","Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif;
+  --fm:"JetBrains Mono",Consolas,"SF Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--ff); color:var(--fg); background:var(--bg); line-height:1.6;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* aurora */
+.aurora{position:fixed;inset:0;z-index:-2;overflow:hidden;background:
+  radial-gradient(1200px 600px at 15% -10%,rgba(122,162,247,.20),transparent 60%),
+  radial-gradient(900px 500px at 90% 10%,rgba(187,154,247,.16),transparent 60%),
+  radial-gradient(1000px 700px at 50% 110%,rgba(158,206,106,.10),transparent 60%),
+  var(--bg);}
+.aurora::after{content:"";position:absolute;inset:-40%;background:
+  conic-gradient(from 0deg,transparent,rgba(122,162,247,.10),transparent 30%);
+  animation:spin 40s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.grid{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 100% 70% at 50% 0%,#000 40%,transparent 75%);}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+a{color:var(--accent);text-decoration:none}
+code,.mono{font-family:var(--fm)}
+
+/* nav */
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
+  background:rgba(10,12,18,.72);border-bottom:1px solid rgba(255,255,255,.07)}
+nav{display:flex;align-items:center;gap:20px;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.05rem;color:var(--fg)}
+.logo .dot{width:11px;height:11px;border-radius:50%;background:var(--safe);
+  box-shadow:0 0 12px var(--safe);animation:pulse 2.4s infinite}
+@keyframes pulse{50%{opacity:.45;box-shadow:0 0 4px var(--safe)}}
+nav .links{margin-left:auto;display:flex;gap:26px;align-items:center}
+nav .links a{color:var(--fg2);font-size:.92rem;font-weight:500}
+nav .links a:hover{color:var(--fg)}
+.lang{display:flex;background:var(--panel);border:1px solid var(--panel-b);border-radius:9px;overflow:hidden}
+.lang a{padding:6px 12px;font-size:.82rem;font-weight:700;color:var(--fg3)}
+.lang a.on{background:linear-gradient(135deg,#7aa2f7,#bb9af7);color:#08090d}
+/* sticky header 里的按钮不能用渐变：header 有 backdrop-filter，会在合成
+   层里把按钮整个压掉（字还在但看不清）。改用描边幽灵按钮。 */
+.gh-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;
+  background:rgba(255,255,255,.06);border:1px solid var(--panel-b);
+  color:var(--fg);font-weight:700;font-size:.9rem}
+.gh-btn:hover{border-color:var(--accent);color:var(--fg);transform:translateY(-1px)}
+.gh-btn:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(122,162,247,.4)}
+.gh-btn svg{width:17px;height:17px;fill:currentColor}
+.burger{display:none;background:none;border:0;color:var(--fg);font-size:1.6rem;cursor:pointer}
+
+/* hero */
+.hero{padding:96px 0 72px;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:9px;padding:7px 16px;border-radius:999px;
+  background:var(--panel);border:1px solid var(--panel-b);font-size:.83rem;color:var(--fg2);
+  margin-bottom:26px;backdrop-filter:blur(8px)}
+.badge .tag{background:var(--safe);color:#0a0c12;padding:2px 9px;border-radius:999px;
+  font-size:.72rem;font-weight:800}
+h1{font-size:clamp(2.3rem,6.5vw,4.4rem);line-height:1.08;letter-spacing:-.02em;
+  font-weight:800;margin-bottom:22px}
+h1 .grad{background:linear-gradient(120deg,var(--accent),var(--accent2) 55%,var(--safe));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lede{font-size:clamp(1.02rem,2.2vw,1.24rem);color:var(--fg2);max-width:660px;margin:0 auto 34px}
+.cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:18px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 26px;border-radius:12px;
+  font-weight:700;font-size:.98rem;transition:.2s;cursor:pointer;border:1px solid transparent}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0c12;
+  box-shadow:0 10px 30px rgba(122,162,247,.32)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(122,162,247,.45)}
+.btn-ghost{background:var(--panel);border-color:var(--panel-b);color:var(--fg);backdrop-filter:blur(8px)}
+.btn-ghost:hover{border-color:var(--accent);transform:translateY(-2px)}
+.meta{color:var(--fg3);font-size:.85rem}
+.meta b{color:var(--fg2);font-weight:600}
+
+/* window mock */
+.shot{margin:20px auto 0;max-width:980px;border-radius:var(--radius);overflow:hidden;
+  border:1px solid var(--panel-b);background:var(--bg2);
+  box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04) inset;
+  transform:perspective(1600px) rotateX(6deg);transform-origin:top}
+.shot img{width:100%;display:block}
+.shot .bar{display:flex;gap:7px;padding:11px 14px;border-bottom:1px solid var(--panel-b);
+  background:rgba(255,255,255,.02)}
+.shot .bar i{width:11px;height:11px;border-radius:50%;background:#3a4050}
+.shot .bar i:nth-child(1){background:#f7768e}.shot .bar i:nth-child(2){background:#e0af68}
+.shot .bar i:nth-child(3){background:#9ece6a}
+.shot .cap{font-size:.78rem;color:var(--fg3);text-align:center;padding:11px;background:rgba(255,255,255,.015)}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:64px}
+.stat{background:var(--panel);border:1px solid var(--panel-b);border-radius:14px;
+  padding:22px;text-align:center;backdrop-filter:blur(8px)}
+.stat .n{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;
+  background:linear-gradient(120deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat .l{font-size:.82rem;color:var(--fg3);margin-top:4px}
+
+/* sections */
+section{padding:78px 0}
+.sec-head{text-align:center;margin-bottom:48px}
+.eyebrow{color:var(--accent);font-size:.8rem;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;margin-bottom:12px}
+h2{font-size:clamp(1.7rem,4vw,2.5rem);font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
+.sec-head p{color:var(--fg2);max-width:620px;margin:0 auto}
+
+/* features */
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;align-items:stretch}
+.card{background:var(--panel);border:1px solid var(--panel-b);border-radius:var(--radius);
+  padding:28px;backdrop-filter:blur(10px);transition:.25s;position:relative;overflow:hidden;
+  display:flex;flex-direction:column}
+.card p{margin-bottom:0}
+.card::before{content:"";position:absolute;inset:0;opacity:0;transition:.25s;
+  background:linear-gradient(135deg,rgba(122,162,247,.09),transparent 55%)}
+.card:hover{transform:translateY(-4px);border-color:rgba(122,162,247,.4)}
+.card:hover::before{opacity:1}
+.card .ico{font-size:1.7rem;margin-bottom:14px}
+.card h3{font-size:1.06rem;font-weight:700;margin-bottom:9px}
+.card p{color:var(--fg2);font-size:.92rem}
+
+/* scanners table */
+.cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.cat{display:flex;gap:15px;align-items:flex-start;background:var(--panel);
+  border:1px solid var(--panel-b);border-radius:14px;padding:20px;backdrop-filter:blur(8px);
+  transition:.2s}
+.cat:hover{border-color:rgba(122,162,247,.35);transform:translateX(3px)}
+.cat .em{font-size:1.5rem;flex-shrink:0}
+.cat .t{font-weight:700;margin-bottom:3px}
+.cat .d{color:var(--fg2);font-size:.85rem;line-height:1.5}
+
+/* safety */
+.safe-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+.safe-list{background:var(--panel);border:1px solid var(--panel-b);border-radius:var(--radius);
+  padding:30px;backdrop-filter:blur(10px)}
+.safe-list li{list-style:none;display:flex;gap:13px;padding:11px 0;
+  border-bottom:1px solid rgba(255,255,255,.05)}
+.safe-list li:last-child{border:0}
+.safe-list .ck{color:var(--safe);font-weight:800;flex-shrink:0}
+.safe-list .no{color:var(--rose);font-weight:800;flex-shrink:0}
+.safe-list b{display:block;margin-bottom:2px}
+.safe-list span{color:var(--fg2);font-size:.87rem}
+.code{background:var(--bg2);border:1px solid var(--panel-b);border-radius:14px;padding:18px;
+  font-family:var(--fm);font-size:.83rem;color:var(--fg2);overflow-x:auto;line-height:1.8}
+.code .cm{color:var(--fg3)}
+.code .kw{color:var(--accent2)}
+.code .st{color:var(--safe)}
+
+/* i18n / themes strip */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.sw{border-radius:12px;padding:18px;border:1px solid var(--panel-b);text-align:center}
+.sw b{display:block;font-size:.9rem;margin-bottom:3px}
+.sw span{font-size:.74rem;opacity:.75}
+
+/* CTA band */
+.band{text-align:center;background:linear-gradient(135deg,rgba(122,162,247,.13),rgba(187,154,247,.1));
+  border:1px solid rgba(122,162,247,.3);border-radius:24px;padding:52px 28px;margin:20px 0 10px}
+
+/* footer */
+footer{border-top:1px solid rgba(255,255,255,.07);padding:44px 0;margin-top:60px;
+  color:var(--fg3);font-size:.87rem}
+.foot{display:flex;gap:22px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.foot nav{display:flex;gap:20px;height:auto}
+.foot a{color:var(--fg3)}.foot a:hover{color:var(--fg)}
+.lic{max-width:var(--max);margin:26px auto 0;padding:0 24px;font-size:.86rem;color:var(--fg2);line-height:1.75}
+.lic b{color:var(--fg)}
+.lic a{text-decoration:underline}
+
+/* reveal */
+/* reveal: 默认可见，JS 只是增强。绝不能写成 opacity:0 了事 ——
+   JS 挂了 / 还没执行 / 截图工具里，整页就白了。 */
+.rv{opacity:1}
+.js .rv{opacity:0;transform:translateY(26px);transition:.7s cubic-bezier(.2,.7,.3,1)}
+.js .rv.in{opacity:1;transform:none}
+
+@media(max-width:860px){
+  nav .links{position:fixed;inset:64px 0 auto;background:rgba(10,12,18,.97);flex-direction:column;
+    padding:26px;gap:20px;border-bottom:1px solid var(--panel-b);display:none}
+  nav .links.open{display:flex}
+  .burger{display:block;margin-left:auto}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .safe-grid{grid-template-columns:1fr}
+  .hero{padding:64px 0 56px}
+}
+@media(max-width:520px){
+  .stats{grid-template-columns:1fr}
+  .foot{flex-direction:column;text-align:center}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="aurora"></div><div class="grid"></div>
+
+<header>
+  <div class="wrap"><nav>
+    <div class="logo"><span class="dot"></span>DevCleaner</div>
+    <button class="burger" id="burger" aria-label="Menu">☰</button>
+    <div class="links" id="links">
+      <a href="#features">Features</a>
+      <a href="#scanners">Scanners</a>
+      <a href="#safety">Safety</a>
+      <div class="lang"><a href="index.html" class="on">EN</a><a href="index.zh.html">中文</a></div>
+      <a href="https://github.com/matou1118/DevCleaner" class="gh-btn" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub</a>
+    </div>
+  </nav></div>
+</header>
+
+<!-- HERO -->
+<div class="wrap">
+  <div class="hero">
+    <div class="badge rv"><span class="tag">v0.2.0</span> open source · CC BY-NC 4.0 · Windows</div>
+    <h1 class="rv">Find what you can<br><span class="grad">safely delete.</span></h1>
+    <p class="lede rv">A standalone cleaner that shows its work. Ten evidence-based scanners,
+      every file to the Recycle&nbsp;Bin, registry backed up before it's touched — and a reason
+      printed next to every single item.</p>
+    <div class="cta rv">
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">
+        ⬇ Download v0.2.0</a>
+      <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">
+        <svg viewBox="0 0 16 16" style="width:17px;fill:currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        Star on GitHub</a>
+    </div>
+    <p class="meta rv">Single <b>33 MB</b> exe · no Python, Node, Java or browser needed · <b>76</b> self-tests</p>
+
+    <div class="shot rv">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img src="img/01-overview.en.png" alt="DevCleaner showing all ten categories in one screen, 2.02 GB reclaimable" loading="eager" width="1180" height="900">
+      <div class="cap">Every category on one screen — nothing expanded, nothing hidden. Real run, real numbers.</div>
+    </div>
+
+    <div class="stats rv">
+      <div class="stat"><div class="n" data-stat="total">—</div><div class="l">reclaimable on a real machine</div></div>
+      <div class="stat"><div class="n" data-stat="scanners">9</div><div class="l">evidence-based scanners</div></div>
+      <div class="stat"><div class="n">6</div><div class="l">colour themes, live switch</div></div>
+      <div class="stat"><div class="n" data-stat="tests">76</div><div class="l">self-tests, CI on 3.10–3.13</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features"><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">Why it's different</div>
+    <h2>Most cleaners guess.<br>This one shows the evidence.</h2>
+    <p>Every item carries the signal that flagged it — the running process, the uninstall entry,
+      the remote URL. If it can't prove a file is dead, it leaves it alone.</p>
+  </div>
+  <div class="feat">
+    <div class="card rv"><div class="ico">🔍</div><h3>Triangulated, not guessed</h3>
+      <p>An installer is only offered when the product name resolves <em>and</em> a matching process,
+        install directory, or uninstall registry entry says it's already installed. One loose signal
+        isn't enough.</p></div>
+    <div class="card rv"><div class="ico">↺️</div><h3>Deleted, but reversible</h3>
+<p>Files move to a local backup directory you can roll back in one click for 7 days;
+expired backups are purged at startup. Nothing is hard-deleted.</p></div>
+    <div class="card rv"><div class="ico">🛡️</div><h3>Registry backed up first</h3>
+      <p>Registry keys are exported to a <code>.reg</code> file <em>before</em> deletion. If the
+        export fails, the deletion is refused — never a silent edit.</p></div>
+    <div class="card rv"><div class="ico">🗑️</div><h3>Uninstall, then sweep</h3>
+  <p>Reads the installed-software list, runs the vendor's own uninstaller, then auto-scans
+  for leftovers (registry keys, install directory, AppData, shortcuts) to clear in one click.</p></div>
+  <div class="card rv"><div class="ico">🔒</div><h3>Your repos are untouchable</h3>
+      <p>A Git clone with a <code>remote</code> never enters the deletable list. Only local clones
+        with no remote are ever considered.</p></div>
+    <div class="card rv"><div class="ico">⏱️</div><h3>Age and locks respected</h3>
+      <p>Stale temp files need a minimum age. Anything held open by a running process is skipped
+        and reported, not forced.</p></div>
+    <div class="card rv"><div class="ico">🌐</div><h3>Bilingual &amp; themed</h3>
+      <p>Chinese and English, switchable in the top-right. Six colour themes, WCAG&nbsp;AA contrast
+        checked. Fully offline — no network calls, ever.</p></div>
+  </div>
+</div></section>
+
+<!-- SCANNERS -->
+<section id="scanners"><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">Ten scanners</div>
+    <h2>What it actually looks for</h2>
+    <p>Counted per entry where bytes are meaningless — the registry and empty-file scanners show
+      item counts, not fake gigabytes.</p>
+  </div>
+  <div class="cats rv" id="cats"><!-- filled from web/stats.json, see web/gen_stats.py --></div>
+</div></section>
+
+<!-- SAFETY -->
+<section id="safety"><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">Safety</div>
+    <h2>What it refuses to do</h2>
+    <p>A cleaner is only useful if you trust it on a machine you care about.</p>
+  </div>
+  <div class="safe-grid">
+    <ul class="safe-list rv">
+      <li><span class="ck">✓</span><div><b>Registry is never edited blind</b>
+        <span>Exported to <code>.reg</code> first; if the export fails the delete is refused.
+        Restore with <code>reg import</code>.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Files stay restorable</b>
+        <span>Backed up all the way — nothing is hard-deleted behind your back, and it rolls back for 7 days.</span></div></li>
+      <li><span class="ck">✓</span><div><b>Locked files are skipped</b>
+        <span>Anything a running process holds open is reported instead of forced.</span></div></li>
+      <li><span class="no">✕</span><div><b>No system directories</b>
+        <span>Never scans <code>C:\Windows</code>, <code>Program Files</code> or system
+        temp roots.</span></div></li>
+      <li><span class="no">✕</span><div><b>No repo with a remote</b>
+        <span>Clones that push anywhere are excluded from deletion entirely.</span></div></li>
+      <li><span class="no">✕</span><div><b>No network, no telemetry</b>
+        <span>Runs fully offline. Nothing about your machine leaves it.</span></div></li>
+    </ul>
+    <div class="rv">
+      <div class="code"><span class="cm"># what deleting a registry entry actually does</span>
+<span class="kw">def</span> apply_registry_item(item):
+    <span class="kw">if</span> not <span class="kw">not</span> backup(item):   <span class="cm"># export first</span>
+        <span class="kw">return</span> <span class="kw">False</span>, <span class="st">"backup failed"</span>  <span class="cm"># refuse</span>
+    <span class="kw">return</span> <span class="kw">True</span>, <span class="st">"已删除 · 备份 "</span> + <span class="st">"\\\\DevCleaner\\backups\\"</span>
+
+<span class="cm"># and files never get hard-deleted</span>
+<span class="kw">def</span> to_recycle_bin(path):
+    <span class="kw">return</span> SHFileOperationW(path, FOF_ALLOWUNDO)</div>
+    </div>
+  </div>
+</div></section>
+
+<!-- THEMES -->
+<section><div class="wrap">
+  <div class="sec-head rv">
+    <div class="eyebrow">Look</div>
+    <h2>Six themes, zero rebuilds</h2>
+    <p>Switch in the top-right; the choice is written straight back to
+      <code>settings.yaml</code> and survives a restart.</p>
+  </div>
+  <div class="strip rv">
+    <div class="sw" style="background:#1a1b26;color:#c0caf5"><b>Tokyo Night</b><span>default</span></div>
+    <div class="sw" style="background:#232136;color:#e0def4"><b>Rosé Pine</b><span>soft contrast</span></div>
+    <div class="sw" style="background:#0f1117;color:#e6e9f0"><b>Ink</b><span>near-black</span></div>
+    <div class="sw" style="background:#ffffff;color:#1a1a1a"><b>Paper</b><span>light</span></div>
+    <div class="sw" style="background:#faf8f3;color:#2b2b2b"><b>Studio Light</b><span>warm</span></div>
+    <div class="sw" style="background:#2b2b31;color:#e8e8ea"><b>Studio Dark</b><span>neutral</span></div>
+  </div>
+</div></section>
+
+<!-- CTA -->
+<section><div class="wrap">
+  <div class="band rv">
+    <h2 style="margin-bottom:12px">Try it on a machine you care about</h2>
+    <p style="color:var(--fg2);max-width:520px;margin:0 auto 28px">
+      One exe, no install, no dependencies. Read the reasons it gives, then decide.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">⬇ Download v0.2.0</a>
+      <a class="btn btn-ghost" href="https://github.com/matou1118/DevCleaner">Browse the source</a>
+    </div>
+  </div>
+</div></section>
+
+<p class="lic">Licence: CC BY-NC 4.0 — free to modify and remix,
+  <b>attribution to Matou1118 required</b>, <b>non-commercial only</b>.
+  <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">Full terms</a></p>
+<footer><div class="wrap foot">
+  <div>DevCleaner v0.2.0 · CC BY-NC 4.0 · <a href="https://github.com/matou1118/DevCleaner">github.com/matou1118/DevCleaner</a></div>
+  <nav style="display:flex;gap:20px">
+    <a href="https://github.com/matou1118/DevCleaner">Source</a>
+    <a href="https://github.com/matou1118/DevCleaner/releases">Releases</a>
+    <a href="https://github.com/matou1118/DevCleaner/releases/tag/v0.2.0">v0.2.0</a>
+    <a href="https://github.com/matou1118/DevCleaner/issues">Issues</a>
+    <a href="https://github.com/matou1118/DevCleaner/blob/main/LICENSE">License</a>
+  </nav>
+</div></footer>
+
+<script>
+const b=document.getElementById('burger'),l=document.getElementById('links');
+b.onclick=()=>l.classList.toggle('open');
+l.querySelectorAll('a').forEach(a=>a.onclick=()=>l.classList.remove('open'));
+// 只有 JS 真的活着时才启用入场动画，否则保持静态可见。
+document.documentElement.classList.add('js');
+const io=new IntersectionObserver(es=>es.forEach(e=>{
+  if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}
+}),{threshold:.12});
+document.querySelectorAll('.rv').forEach((e,i)=>{e.style.transitionDelay=(i%4)*60+'ms';io.observe(e)});
+// 兜底：1.2s 后还没 revealed 的全部显示出来，绝不留白屏
+setTimeout(()=>document.querySelectorAll('.rv:not(.in)').forEach(e=>e.classList.add('in')),1200);
+
+/* Numbers come from web/stats.json (real scan via web/gen_stats.py). Hardcoding
+   "2.02 GB" means the page lies the moment a cache gets cleared. */
+const DESC={
+ "已安装软件的安装包":"Setup files for programs you already have, confirmed by running process + install dir + uninstall entry.",
+ "传统垃圾文件":"Thumbnails, jump lists, browser cache, shader caches, crash dumps, Windows Update cache.",
+ "过期临时文件":"Untouched for N days. Flagged for review if an exe is running from the directory.",
+ "GitHub 残留":"gh CLI, GitHub Desktop and Copilot caches; local clones with no remote.",
+ "AI Agent / Skill 缓存":"Packages absent from your <code>plugin</code> list, plus stale <code>X</code> / <code>X@latest</code> pairs.",
+ "更新器残留":"<code>*@*-updater\\pending\\*</code> and <code>*\\updates\\executors\\*</code>.",
+ "构建产物 / 开发垃圾":"A <code>build/</code> sitting next to its <code>.spec</code>; <code>__pycache__</code>, <code>.pytest_cache</code> and friends.",
+ "Python 环境与缓存":"Virtualenvs (with a real <code>pyvenv.cfg</code>), pip cache, and any directory you add to the config.",
+ "空文件 / 空目录 / 断链":"Zero-byte leftovers, skipping <code>.gitkeep</code>, <code>*.lock</code>, <code>desktop.ini</code> and <code>Thumbs.db</code>.",
+ "未分类":"Anything that didn't match a category above."
+};
+fetch('stats.json').then(r=>r.json()).then(s=>{
+  document.querySelectorAll('[data-stat="total"]').forEach(e=>e.textContent=s.total_human);
+  document.querySelectorAll('[data-stat="scanners"]').forEach(e=>e.textContent=s.scanners);
+    document.querySelectorAll('[data-stat="tests"]').forEach(e=>e.textContent=s.tests);
+  const box=document.getElementById('cats');
+  if(!box||!s.categories)return;
+  box.innerHTML=s.categories.map(c=>{
+    const d=DESC[c.zh]||'';
+    const n=c.count_extra?` &middot; plus ${c.count_extra} counted per entry`:'';
+    return `<div class="cat"><span class="em">${c.icon}</span><div>
+      <div class="t">${c.en}</div>
+      <div class="d">${d} Measured <b>${c.size_human}</b> (${c.count} item${c.count===1?'':'s'}${n}).</div></div></div>`;
+  }).join('');
+}).catch(()=>{});
+</script>
+</body>
+</html>

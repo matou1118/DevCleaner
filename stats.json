@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "scanned_at": "13:56:18",
+  "total": 27948426,
+  "total_human": "26.65 MB",
+  "safe_human": "22.04 MB",
+  "caution_human": "4.61 MB",
+  "scanners": 9,
+  "tests": 76,
+  "extra_by_count": 2,
+  "categories": [
+    {
+      "icon": "🐍",
+      "zh": "Python 环境与缓存",
+      "en": "Python envs and caches",
+      "count": 2,
+      "bytes": 16391554,
+      "size_human": "15.63 MB",
+      "count_extra": 0
+    },
+    {
+      "icon": "🧹",
+      "zh": "传统垃圾文件",
+      "en": "Traditional junk files",
+      "count": 1,
+      "bytes": 11556872,
+      "size_human": "11.02 MB",
+      "count_extra": 0
+    },
+    {
+      "icon": "∅",
+      "zh": "空文件 / 空目录 / 断链",
+      "en": "Empty files / empty dirs / broken links",
+      "count": 1,
+      "bytes": 0,
+      "size_human": "0 B",
+      "count_extra": 1
+    }
+  ]
+}
