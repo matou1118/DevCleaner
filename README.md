@@ -1,6 +1,6 @@
 # DevCleaner
 
-> 官网 / Official site: https://ttread.cn
+> 官网 / Official site: https://www.ttread.cn/
 
 Windows 本地清理工具。原生窗口（PySide6），单文件 exe，**离线可用，不依赖浏览器、Node、Java 或任何外部运行时**。
 
