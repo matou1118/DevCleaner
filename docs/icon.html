@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DevCleaner Icon 400x400</title>
+<style>
+  * { margin:0; padding:0; }
+  html, body { width:400px; height:400px; overflow:hidden; background:transparent; }
+</style>
+</head>
+<body>
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1E2033"/>
+      <stop offset="1" stop-color="#2B3049"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.22" cy="0.16" r="0.88">
+      <stop offset="0" stop-color="#7AA2F7" stop-opacity="0.44"/>
+      <stop offset="1" stop-color="#7AA2F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="broom" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#9CCFD8"/>
+      <stop offset="0.5" stop-color="#7AA2F7"/>
+      <stop offset="1" stop-color="#5E6AD2"/>
+    </linearGradient>
+    <clipPath id="round"><rect x="0" y="0" width="400" height="400" rx="86"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#round)">
+    <rect width="400" height="400" fill="url(#tile)"/>
+    <rect width="400" height="400" fill="url(#glow)"/>
+
+    <ellipse cx="200" cy="344" rx="74" ry="11" fill="rgba(0,0,0,.32)"/>
+
+    <rect x="188" y="66" width="24" height="128" rx="12" fill="url(#broom)"/>
+    <rect x="193" y="78" width="7" height="104" rx="3.5" fill="rgba(255,255,255,.32)"/>
+    <rect x="174" y="186" width="52" height="22" rx="10" fill="#EBBCBA"/>
+    <rect x="182" y="191" width="36" height="6" rx="3" fill="rgba(255,255,255,.40)"/>
+    <path d="M170 212 H230 L256 320 Q258 338 240 338 H160 Q142 338 144 320 Z" fill="url(#broom)"/>
+    <path d="M182 224 V322 M200 227 V326 M218 224 V322" stroke="rgba(255,255,255,.26)" stroke-width="5" stroke-linecap="round" fill="none"/>
+
+    <path d="M306 84 L312 104 L332 110 L312 116 L306 136 L300 116 L280 110 L300 104 Z" fill="#EBBCBA"/>
+    <path d="M338 155 L341.5 166.5 L353 170 L341.5 173.5 L338 185 L334.5 173.5 L323 170 L334.5 166.5 Z" fill="#9CCFD8"/>
+  </g>
+
+  <rect x="2.5" y="2.5" width="395" height="395" rx="84" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
+</svg>
+</body>
+</html>
